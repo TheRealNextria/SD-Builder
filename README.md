@@ -1,123 +1,95 @@
-SD-Builder (Windows Forms)
+# SD-Builder (Windows Forms)
 
-SD-Builder is a C# WinForms app for managing game lists and firmware files for multiple retro platforms — with a fast, responsive “Listmaker” for building .txt lists and one-click firmware helpers. The UI is fully designer-based, so you can edit everything in Visual Studio’s Designer.
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+![Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows)
+![WinForms](https://img.shields.io/badge/UI-WinForms-0078D6)
+![Status](https://img.shields.io/badge/state-actively_developed-brightgreen)
 
-✨ Highlights
+**SD-Builder** is a C# WinForms app for managing game lists and firmware files across multiple retro platforms — with a fast, responsive **Listmaker** for building `.txt` lists. The UI is fully designer-based (Visual Studio Designer friendly).
 
-Listmaker (Files/Dirs)
+---
 
-Fast async scanning (UI stays responsive), cancellable
+## Table of Contents
+- [Highlights](#highlights)
+- [Everyday Workflow](#everyday-workflow)
+- [Shortcuts](#shortcuts)
+- [Platforms Supported](#platforms-supported)
+- [Build](#build)
+- [Project Structure](#project-structure)
+- [Settings](#settings)
+- [Version](#version)
+- [License](#license)
 
-Live byte counting for files & directories
+---
 
-Live filter as you type (no * needed; typing zelda matches *zelda*)
+## Highlights
 
-Drag & drop: drop a folder to load it or a .txt to import a list
+- **Listmaker (Files/Dirs)**
+  - Async, cancellable scanning (UI stays responsive)
+  - Live byte counting for files & directories
+  - **Live filter** as you type (no `*` needed — `zelda` matches `*zelda*`)
+  - Drag & drop: drop a **folder** to load, or a **.txt** to import
+  - Context menu: **Open**, **Reveal in Explorer**, **Remove**
+  - **Checked-only save** to `.txt`
+  - **Bulk select/unselect** with debounce + bulk-guard (no stutter)
 
-Context menu: Open, Reveal in Explorer, Remove
+- **Firmware helpers**
+  - Xstation, **SAROO**, **GameCube (Swiss IPL)**, **Summercart64**
+  - SC64 extras: **Install 64DD IPL** and **Install Emulators**
 
-Checked-only save to .txt
+- **Drives & Settings**
+  - Drive picker with Refresh / Stop / Open / Eject
+  - Settings load/save (Only removable, timeouts, overwrite auto-action)
+  - Custom app icon (EXE + Form)
 
-Bulk select/unselect with debounce + bulk-guard (no UI stutter)
+- **Designer-friendly**
+  - All controls in `MainForm.Designer.cs`
+  - Logic & event handlers in `MainForm.cs`
+  - Cleaned Designer (reduced duplicate property churn)
 
-Firmware helpers
+---
 
-Xstation, SAROO, GameCube (Swiss IPL), Summercart64
+## Everyday Workflow
 
-SC64 extras: Install 64DD IPL and Install Emulators
+1. Open the **Listmaker** tab.  
+2. Choose **Files** or **Dirs** and pick a folder (or drag & drop one).  
+3. Type to filter (e.g., `zelda` → matches `*zelda*` for files).  
+4. Check the items you want, then **Save** to a `.txt`.  
+5. Use the firmware tabs to check/download platform firmware as needed.
 
-Drives & Settings
+> Tip: Store your lists in a `GameLists` folder next to the EXE.
 
-Drive picker with Refresh/Stop/Open/Eject
+---
 
-Settings load/save (Only removable, timeouts, overwrite auto-action)
+## Shortcuts
 
-Custom app icon (EXE + Form)
+- **Ctrl + O** — Open `.txt` (Listmaker)  
+- **Ctrl + S** — Save checked items to `.txt` (Listmaker)  
+- **Ctrl + A** — Check all  
+- **Ctrl + Shift + A** — Uncheck all  
+- **Enter** (in filter) — Instant refresh  
 
-Designer-friendly
 
-All controls live in MainForm.Designer.cs
+---
 
-Logic & event handlers in MainForm.cs
+## Platforms Supported
 
-Cleaned Designer (reduced duplicate property churn)
+- **Xstation**  
+- **Sega Saturn SAROO**  
+- **GameCube** — Swiss IPL  
+- **Summercart64 (SC64)** — **Install 64DD IPL** + **Install Emulators**
 
-🖱️ Everyday workflow
+> Exact file locations/filenames are handled by each platform’s flow.
 
-Open the Listmaker tab.
+---
 
-Choose Files or Dirs, pick a folder (or just drag & drop one).
+## Build
 
-Type to filter (e.g., zelda → matches *zelda* for files).
+**Requirements:** Windows, .NET 8 SDK (or newer), Visual Studio 2022 (recommended)
 
-Check the items you want, then Save to a .txt.
+**Open & build in VS:**
+- Open `SDBuilder.Win.csproj` and **Build**.
 
-Use firmware tabs to check/download platform firmware as needed.
-
-Tip: .txt lists are typically stored in a GameLists folder next to the EXE.
-
-⌨️ Shortcuts
-
-Ctrl + O — Open .txt (Listmaker)
-
-Ctrl + S — Save checked items to .txt (Listmaker)
-
-Ctrl + A — Check all (Listmaker)
-
-Ctrl + Shift + A — Uncheck all (Listmaker)
-
-Enter (in filter) — Instant refresh
-
-F5 — Rescan current Listmaker folder
-
-🧩 Platforms supported (firmware flows)
-
-Xstation
-
-Sega Saturn SAROO
-
-GameCube — Swiss IPL
-
-Summercart64 (SC64) — Install 64DD IPL + Install Emulators
-
-Note: Exact locations/filenames are handled by the app’s platform flows; use the platform tabs’ “check/download/install” buttons.
-
-🛠️ Build
-
-Requirements: Windows, .NET 8 SDK (or newer), Visual Studio 2022 recommended.
-
-Open & build:
-
-Open SDBuilder.Win.csproj in Visual Studio and Build.
-
-Or CLI:
-
+**CLI:**
+```bash
 dotnet build SDBuilder.Win.csproj -c Release
-
-
-Run: Start the built EXE from bin\Release\net8.0-windows\.
-
-📁 Project structure
-SDBuilderWin/
-├─ MainForm.cs                 // logic & event handlers
-├─ MainForm.Designer.cs        // all UI elements (Designer-editable)
-├─ MainForm.resx
-├─ Program.cs
-├─ SDBuilder.Win.csproj
-├─ app.manifest
-└─ Assets/
-   └─ SDBuilder_Icon.ico
-
-🔧 Settings (UI)
-
-Only removable — limit drive list to removable devices.
-
-Timeouts — copy/overwrite related timings.
-
-Overwrite auto-action — Yes/No default for overwrite prompts.
-
-Settings are saved and loaded automatically.
-
-🧭 Version
-
-Current baseline: v2.31 — Designer refactor + SC64 64DD IPL + Emulators + Listmaker QoL (drag&drop, context menu, shortcuts, checked-only save, live filter).
