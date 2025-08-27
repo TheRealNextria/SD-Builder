@@ -232,7 +232,7 @@ namespace SDBuilderWin
             topPanel.Location = new Point(0, 0);
 topPanel.AutoSize = false;
             topPanel.Height = 56;
-            topPanel.Padding = new Padding(10, 8, 10, 8);
+
             topPanel.Name = "topPanel";
             topPanel.Padding = new Padding(10, 8, 10, 8);
             topPanel.Size = new Size(1000, 60);
@@ -240,11 +240,7 @@ topPanel.AutoSize = false;
             // 
             // driveRow
             // 
-            driveRow.AutoSize = false;
-driveRow.Height = 36;
-driveRow.MinimumSize = new Size(0, 36);
-driveRow.WrapContents = false;
-driveRow.Margin = new Padding(0);
+
             driveRow.Controls.Add(lblDrive);
             driveRow.Controls.Add(cmbDrives);
             driveRow.Controls.Add(btnRefresh);
@@ -252,11 +248,11 @@ driveRow.Margin = new Padding(0);
             driveRow.Controls.Add(btnOpen);
             driveRow.Controls.Add(btnEject);
             driveRow.Dock = DockStyle.Top;
-            driveRow.WrapContents = false;
+
             driveRow.AutoSize = false;
             driveRow.Height = 36;
             driveRow.MinimumSize = new Size(0, 36);
-            driveRow.Margin = new Padding(0);
+
 driveRow.Location = new Point(10, 8);
             driveRow.Margin = new Padding(0);
             driveRow.Name = "driveRow";
@@ -277,7 +273,6 @@ driveRow.Location = new Point(10, 8);
             // cmbDrives
             // 
             cmbDrives.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbDrives.Width = 300;
             cmbDrives.Location = new Point(110, 3);
             cmbDrives.Name = "cmbDrives";
             cmbDrives.Size = new Size(260, 23);
@@ -289,7 +284,7 @@ driveRow.Location = new Point(10, 8);
             btnRefresh.Margin = new Padding(8, 0, 0, 0);
             btnRefresh.Name = "btnRefresh";
             btnRefresh.AutoSize = false;
-            btnRefresh.Width = 90;
+
 btnRefresh.Size = new Size(80, 28);
             btnRefresh.TabIndex = 2;
             btnRefresh.Text = "Refresh";
@@ -301,7 +296,7 @@ btnRefresh.Size = new Size(80, 28);
             btnStop.Margin = new Padding(12, 0, 0, 0);
             btnStop.Name = "btnStop";
             btnStop.AutoSize = false;
-            btnStop.Width = 90;
+
 btnStop.Size = new Size(80, 28);
             btnStop.TabIndex = 3;
             btnStop.Text = "Stop";
@@ -312,7 +307,7 @@ btnStop.Size = new Size(80, 28);
             btnOpen.Margin = new Padding(8, 0, 0, 0);
             btnOpen.Name = "btnOpen";
             btnOpen.AutoSize = false;
-            btnOpen.Width = 140;
+
 btnOpen.Size = new Size(130, 28);
             btnOpen.TabIndex = 4;
             btnOpen.Text = "Open in Explorer";
@@ -323,7 +318,7 @@ btnOpen.Size = new Size(130, 28);
             btnEject.Margin = new Padding(8, 0, 0, 0);
             btnEject.Name = "btnEject";
             btnEject.AutoSize = false;
-            btnEject.Width = 120;
+
 btnEject.Size = new Size(110, 28);
             btnEject.TabIndex = 5;
             btnEject.Text = "Eject safely";
@@ -427,7 +422,7 @@ btnEject.Size = new Size(110, 28);
             xListBtns.Location = new Point(674, 8);
             xListBtns.Margin = new Padding(8, 0, 0, 0);
             xListBtns.Name = "xListBtns";
-            xListBtns.Size = new Size(186, 103);
+
             xListBtns.TabIndex = 3;
             // 
             // btnXstationRefreshLists
@@ -538,7 +533,7 @@ btnEject.Size = new Size(110, 28);
             sListBtns.Location = new Point(674, 8);
             sListBtns.Margin = new Padding(8, 0, 0, 0);
             sListBtns.Name = "sListBtns";
-            sListBtns.Size = new Size(186, 103);
+
             sListBtns.TabIndex = 3;
             // 
             // btnSarooRefreshLists
@@ -649,7 +644,7 @@ btnEject.Size = new Size(110, 28);
             gListBtns.Location = new Point(674, 8);
             gListBtns.Margin = new Padding(8, 0, 0, 0);
             gListBtns.Name = "gListBtns";
-            gListBtns.Size = new Size(186, 103);
+
             gListBtns.TabIndex = 3;
             // 
             // btnGamecubeRefreshLists
@@ -761,7 +756,7 @@ btnEject.Size = new Size(110, 28);
             scListBtns.Location = new Point(674, 8);
             scListBtns.Margin = new Padding(8, 0, 0, 0);
             scListBtns.Name = "scListBtns";
-            scListBtns.Size = new Size(186, 103);
+
             scListBtns.TabIndex = 3;
             // 
             // btnSC64RefreshLists
@@ -796,7 +791,7 @@ btnEject.Size = new Size(110, 28);
             scExtras.Location = new Point(974, 8);
             scExtras.Margin = new Padding(8, 0, 0, 0);
             scExtras.Name = "scExtras";
-            scExtras.Size = new Size(0, 0);
+
             scExtras.TabIndex = 5;
             scExtras.WrapContents = false;
             // 
@@ -940,7 +935,8 @@ btnEject.Size = new Size(110, 28);
             chkRecursive.Size = new Size(104, 24);
             chkRecursive.TabIndex = 3;
             chkRecursive.Text = "Include subfolders";
-            // 
+                        chkRecursive.Visible = false;
+// 
             // btnRefreshLM
             // 
             btnRefreshLM.Location = new Point(698, 11);

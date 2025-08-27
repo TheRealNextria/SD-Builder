@@ -80,91 +80,178 @@ namespace SDBuilderWin
 
         // Listmaker UI performance
         System.Windows.Forms.Timer? _lmDebounce;
+        System.Windows.Forms.Timer? _lmFilterDebounce;
         bool _lmBulkChange;
-enum Platform { Xstation, Saroo, Gamecube, Summercart64 }
+        enum Platform { Xstation, Saroo, Gamecube, Summercart64 }
         enum ReplaceDecision { Yes, No, Cancel }
 
-        public MainForm()
+        
+public MainForm()
+{
+    InitializeComponent();
+
+    // Icon & title
+    this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+    Text = $"SD-Builder (GUI) {AppVersion}";
+    lblVersion.Text = AppVersion;
+    Info("Tip: place your .txt files in the GameLists folder next to this .exe.");
+    ScriptDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    // Keyboard shortcuts
+    this.KeyPreview = true;
+    this.KeyDown += (s, e) =>
+    {
+        if (e.Control && e.KeyCode == Keys.O)
         {
-            InitializeComponent();
-			
-			this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-
-            
-            // debounce for Listmaker recalculation
-            _lmDebounce = new System.Windows.Forms.Timer { Interval = 250 };
-            _lmDebounce.Tick += async (_, __) => { _lmDebounce!.Stop(); await RecalcCountersAsync(); };// Title/version
-            Text = $"SD-Builder (GUI) {AppVersion}";
-            lblVersion.Text = AppVersion;
-            Info("Tip: place your .txt files in the GameLists folder next to this .exe.");
-            ScriptDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-            // Wire top bar
-            btnRefresh.Click += (_, __) => RefreshDrives(preserveSelection: true);
-            btnStop.Click    += (_, __) => _cts?.Cancel();
-            btnOpen.Click    += (_, __) => OpenCurrentDriveInExplorer();
-            btnEject.Click   += async (_, __) => await EjectCurrentDriveAsync();
-            cmbDrives.SelectedIndexChanged += (_, __) => UpdateDriveButtonsEnabled();
-            Resize += (_, __) => PositionVersionLabel();
-
-            // Wire platform tabs
-            WirePlatformTab(
-                Platform.Xstation,
-                btnXstationFw, cmbXstationList, btnXstationRefreshLists, btnXstationOpenLists, btnXstationStart,
-                null, null
-            );
-            WirePlatformTab(
-                Platform.Saroo,
-                btnSarooFw, cmbSarooList, btnSarooRefreshLists, btnSarooOpenLists, btnSarooStart,
-                null, null
-            );
-            WirePlatformTab(
-                Platform.Gamecube,
-                btnGamecubeFw, cmbGamecubeList, btnGamecubeRefreshLists, btnGamecubeOpenLists, btnGamecubeStart,
-                null, null
-            );
-            WirePlatformTab(
-                Platform.Summercart64,
-                btnSC64Fw, cmbSC64List, btnSC64RefreshLists, btnSC64OpenLists, btnSC64Start,
-                btnSC64Install64DD, btnSC64InstallEmulators
-            );
-
-            // Wire Listmaker tab
-            WireListmakerTab();
-
-            // Wire settings
-            chkOnlyRemovable.CheckedChanged += (_, __) =>
+            using var ofd = new OpenFileDialog
             {
-                ShowOnlyRemovable = chkOnlyRemovable.Checked;
-                SaveSettings();
-                RefreshDrives(preserveSelection: true);
+                Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+                InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir
             };
-            cmbAuto.Items.Clear();
-            cmbAuto.Items.AddRange(new object[] { "Yes", "No" });
-            cmbAuto.SelectedIndex = 0;
-            btnSaveSettings.Click += (_, __) =>
-            {
-                CopyTimeout = (int)numCopy.Value;
-                OverwriteTimeout = (int)numOW.Value;
-                OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
-                SaveSettings();
-                Info("Settings saved.");
-            };
-
-            // Init
-            Load += (_, __) =>
-            {
-                Directory.CreateDirectory(GameListsDir);
-                LoadSettings();
-                RefreshDrives();
-                Info($"GameLists dir: {GameListsDir}");
-                UpdateDriveButtonsEnabled();
-                PositionVersionLabel();
-            };
-            FormClosed += (_, __) => { if (_hotplugTimer != null) { _hotplugTimer.Stop(); _hotplugTimer.Dispose(); } _lmScanCts?.Cancel(); };
+            if (ofd.ShowDialog(this) == DialogResult.OK) OpenTxtFile(ofd.FileName);
+            e.Handled = true;
         }
+        else if (e.Control && e.KeyCode == Keys.S)
+        {
+            SaveTxt();
+            e.Handled = true;
+        }
+        else if (e.Control && e.KeyCode == Keys.A && !e.Shift)
+        {
+            _lmBulkChange = true;
+            foreach (ListViewItem it in lvList.Items) it.Checked = true;
+            _lmBulkChange = false;
+            _lmDebounce?.Stop(); _lmDebounce?.Start();
+            e.Handled = true;
+        }
+        else if (e.Control && e.Shift && e.KeyCode == Keys.A)
+        {
+            _lmBulkChange = true;
+            foreach (ListViewItem it in lvList.Items) it.Checked = false;
+            _lmBulkChange = false;
+            _lmDebounce?.Stop(); _lmDebounce?.Start();
+            e.Handled = true;
+        }
+    };
 
-        // ---------- Layout helpers that depend on Designer controls ----------
+    // debounce for Listmaker recalculation
+    _lmDebounce = new System.Windows.Forms.Timer { Interval = 250 };
+    _lmDebounce.Tick += async (_, __) => { _lmDebounce!.Stop(); await RecalcCountersAsync(); };
+
+    // debounce for Listmaker filter typing
+    _lmFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+    _lmFilterDebounce.Tick += (_, __) => { _lmFilterDebounce!.Stop(); RefreshListmakerList(); };
+
+    // Wire top bar
+    btnRefresh.Click += (_, __) => RefreshDrives(preserveSelection: true);
+    btnStop.Click    += (_, __) => _cts?.Cancel();
+    btnOpen.Click    += (_, __) => OpenCurrentDriveInExplorer();
+    btnEject.Click   += async (_, __) => await EjectCurrentDriveAsync();
+    cmbDrives.SelectedIndexChanged += (_, __) => UpdateDriveButtonsEnabled();
+    Resize += (_, __) => PositionVersionLabel();
+
+    // Wire platform tabs
+    WirePlatformTab(
+        Platform.Xstation,
+        btnXstationFw, cmbXstationList, btnXstationRefreshLists, btnXstationOpenLists, btnXstationStart,
+        null, null
+    );
+    WirePlatformTab(
+        Platform.Saroo,
+        btnSarooFw, cmbSarooList, btnSarooRefreshLists, btnSarooOpenLists, btnSarooStart,
+        null, null
+    );
+    WirePlatformTab(
+        Platform.Gamecube,
+        btnGamecubeFw, cmbGamecubeList, btnGamecubeRefreshLists, btnGamecubeOpenLists, btnGamecubeStart,
+        null, null
+    );
+    WirePlatformTab(
+        Platform.Summercart64,
+        btnSC64Fw, cmbSC64List, btnSC64RefreshLists, btnSC64OpenLists, btnSC64Start,
+        btnSC64Install64DD, btnSC64InstallEmulators
+    );
+
+    // Wire Listmaker tab
+    WireListmakerTab();
+
+    // Live filter as you type
+    txtFilter.TextChanged += (_, __) => { _lmFilterDebounce?.Stop(); _lmFilterDebounce?.Start(); };
+    txtFilter.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.Handled = true; _lmFilterDebounce?.Stop(); RefreshListmakerList(); } };
+
+            // Always include subfolders; hide the checkbox to simplify UI
+            try { chkRecursive.Checked = true; chkRecursive.Visible = false; } catch { }
+        WireListContextMenu();
+
+    // Drag & drop for Listmaker
+    lvList.AllowDrop = true;
+    lvList.DragEnter += (s, e) =>
+    {
+        if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
+            e.Effect = DragDropEffects.Copy;
+    };
+    lvList.DragDrop += (s, e) =>
+    {
+        if (e.Data?.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        foreach (var path in paths)
+        {
+            if (Directory.Exists(path))
+            {
+                lblStatusLM.Text = "Loading...";
+                _lmFolder = path;
+                SaveSettings();
+                RefreshListmakerList();
+            }
+            else if (string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenTxtFile(path);
+            }
+        }
+    };
+
+    // Wire settings
+    chkOnlyRemovable.CheckedChanged += (_, __) =>
+    {
+        ShowOnlyRemovable = chkOnlyRemovable.Checked;
+        SaveSettings();
+        RefreshDrives(preserveSelection: true);
+    };
+    cmbAuto.Items.Clear();
+    cmbAuto.Items.AddRange(new object[] { "Yes", "No" });
+    cmbAuto.SelectedIndex = 0;
+    btnSaveSettings.Click += (_, __) =>
+    {
+        CopyTimeout = (int)numCopy.Value;
+        OverwriteTimeout = (int)numOW.Value;
+        OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
+        SaveSettings();
+        Info("Settings saved.");
+    };
+
+    // Init
+    Load += (_, __) =>
+    {
+        Directory.CreateDirectory(GameListsDir);
+        LoadSettings();
+        RefreshDrives();
+        Info($"GameLists dir: {GameListsDir}");
+        UpdateDriveButtonsEnabled();
+        PositionVersionLabel();
+
+        if (Directory.Exists(_lmFolder))
+        {
+            lblStatusLM.Text = "Loading...";
+            RefreshListmakerList();
+        }
+    };
+
+    FormClosed += (_, __) =>
+    {
+        if (_hotplugTimer != null) { _hotplugTimer.Stop(); _hotplugTimer.Dispose(); }
+        _lmScanCts?.Cancel();
+    };
+}
+// ---------- Layout helpers that depend on Designer controls ----------
 
         void PositionVersionLabel()
         {
@@ -966,6 +1053,7 @@ return;
                         OverwriteTimeout = dto.OverwriteTimeout;
                         OverwriteAutoAction = dto.OverwriteAutoAction ?? "Yes";
                         ShowOnlyRemovable = dto.ShowOnlyRemovable ?? true;
+                        _lmFolder = dto.LmFolder ?? _lmFolder;
                     }
                 }
             }
@@ -979,7 +1067,7 @@ return;
 
         void SaveSettings()
         {
-            var dto = new SettingsDTO((int)numCopy.Value, (int)numOW.Value, (string)(cmbAuto.SelectedItem ?? "Yes"), ShowOnlyRemovable);
+            var dto = new SettingsDTO((int)numCopy.Value, (int)numOW.Value, (string)(cmbAuto.SelectedItem ?? "Yes"), ShowOnlyRemovable, _lmFolder);
             var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(ConfigFile, json, new UTF8Encoding(false));
             CopyTimeout = (int)numCopy.Value;
@@ -987,7 +1075,7 @@ return;
             OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
         }
 
-        record SettingsDTO(int CopyTimeout, int OverwriteTimeout, string OverwriteAutoAction, bool? ShowOnlyRemovable);
+        record SettingsDTO(int CopyTimeout, int OverwriteTimeout, string OverwriteAutoAction, bool? ShowOnlyRemovable, string? LmFolder);
 
         // Countdown dialogs
         void WaitEnterOrTimeout(int seconds, CancellationToken token)
@@ -1325,89 +1413,166 @@ try
         }
 
         void SaveTxt()
-        {
-                        // Block saving when nothing is checked
-            int checkedCount = 0;
-            foreach (ListViewItem it in lvList.Items)
-                if (it.Checked) checkedCount++;
-            if (checkedCount == 0)
-            {
-                MessageBox.Show(this, "No checked items to save.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-using var sfd = new SaveFileDialog
-            {
-                Title = "Save checked items",
-                Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-                InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir,
-                FileName = "list.txt"
-            };
-            if (sfd.ShowDialog(this) != DialogResult.OK) return;
-
-            var lines = new List<string>();
-            foreach (ListViewItem it in lvList.Items)
-                if (it.Checked) lines.Add(it.Text);
-
-            File.WriteAllLines(sfd.FileName, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier:false));
-            lblStatusLM.Text = $"Saved {lines.Count} items to: {sfd.FileName}";
-        }
-
-        void RefreshListmakerList()
-        {
-            lvList.BeginUpdate();
-            try
-            {
-                lvList.Items.Clear();
-                if (string.IsNullOrWhiteSpace(_lmFolder) || !Directory.Exists(_lmFolder))
-                {
-                    lblStatusLM.Text = "No folder selected.";
-                    SetCounters(0, 0);
-                    return;
-                }
-
-                var filter = (txtFilter.Text ?? "*").Trim();
-                var patterns = filter.Split(new[]{';','|'}, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
-                if (patterns.Length == 0) patterns = new[] { rbFiles.Checked ? "*.*" : "*" };
-
-                IEnumerable<string> items = Enumerable.Empty<string>();
-                var opt = chkRecursive.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-                if (rbFiles.Checked)
-                {
-                    foreach (var pat in patterns)
-                        items = items.Concat(Directory.EnumerateFiles(_lmFolder, pat, opt));
-                }
-                else
-                {
-                    // Directories: ignore pattern and just enumerate all, with optional name filter
-                    items = Directory.EnumerateDirectories(_lmFolder, "*", opt);
-                    if (filter != "*" && filter != "*.*")
-                    {
-                        var needle = filter.Trim('*').ToLowerInvariant();
-                        items = items.Where(d => d.ToLowerInvariant().Contains(needle));
-                    }
-                }
-
-                int added = 0;
-                foreach (var it in items)
-                {
-                    AddRowLM(it);
-                    added++;
-                }
-
-                lblStatusLM.Text = $"Loaded {added} item(s) from: {_lmFolder}";
-            }
-            catch (Exception ex)
-            {
-                lblStatusLM.Text = "Error: " + ex.Message;
-            }
-            finally
-            {
-                lvList.EndUpdate();
-            }
-            _ = RecalcCountersAsync();
-        }
-
+{
+    // Count checked items
+    int checkedCount = 0;
+    foreach (ListViewItem it in lvList.Items)
+        if (it.Checked) checkedCount++;
+    if (checkedCount == 0)
+    {
+        MessageBox.Show(this, "No checked items to save.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return;
     }
+
+    using var sfd = new SaveFileDialog
+    {
+        Title = "Save checked items",
+        Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+        InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir,
+        FileName = "list.txt"
+    };
+    if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+    var lines = new List<string>();
+    foreach (ListViewItem it in lvList.Items)
+        if (it.Checked) lines.Add(it.Text);
+
+    File.WriteAllLines(sfd.FileName, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier:false));
+    lblStatusLM.Text = $"Saved {lines.Count} items to: {sfd.FileName}";
 }
+void OpenTxtFile(string path)
+{
+    string[] lines;
+    try
+    {
+        lines = File.ReadAllLines(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false));
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show(this, "Could not read file:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        return;
+    }
+
+    var existing = new HashSet<string>(lvList.Items.Cast<ListViewItem>().Select(it => NormalizePath(it.Text)), StringComparer.OrdinalIgnoreCase);
+
+    int added = 0, dupes = 0;
+    lvList.BeginUpdate();
+    foreach (var raw in lines)
+    {
+        var norm = NormalizePath(raw);
+        if (string.IsNullOrWhiteSpace(norm)) continue;
+        if (existing.Contains(norm)) { dupes++; continue; }
+        AddRowLM(norm);
+        existing.Add(norm);
+        added++;
+    }
+    lvList.EndUpdate();
+
+    lblStatusLM.Text = $"Loaded {added} new, skipped {dupes} duplicates from: {path}";
+    if (chkAutoValidate.Checked) ValidatePaths();
+    _ = RecalcCountersAsync();
+}
+void WireListContextMenu()
+        {
+            var cm = new ContextMenuStrip();
+            cm.Items.Add("Open", null, (_, __) => OpenSelected());
+            cm.Items.Add("Reveal in Explorer", null, (_, __) => RevealSelected());
+            cm.Items.Add(new ToolStripSeparator());
+            cm.Items.Add("Remove", null, (_, __) =>
+            {
+                foreach (ListViewItem it in lvList.SelectedItems) lvList.Items.Remove(it);
+                _ = RecalcCountersAsync();
+            });
+            lvList.ContextMenuStrip = cm;
+        }
+
+        void OpenSelected()
+        {
+            foreach (ListViewItem it in lvList.SelectedItems)
+                if (File.Exists(it.Text) || Directory.Exists(it.Text))
+                    Process.Start(new ProcessStartInfo(it.Text) { UseShellExecute = true });
+        }
+
+        void RevealSelected()
+        {
+            foreach (ListViewItem it in lvList.SelectedItems)
+            {
+                if (File.Exists(it.Text))
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{it.Text}\"") { UseShellExecute = true });
+                else if (Directory.Exists(it.Text))
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"\"{it.Text}\"") { UseShellExecute = true });
+}
+
+
+      
+
+}
+
+void RefreshListmakerList()
+{
+    lvList.BeginUpdate();
+    try
+    {
+        lvList.Items.Clear();
+
+        if (string.IsNullOrWhiteSpace(_lmFolder) || !Directory.Exists(_lmFolder))
+        {
+            lblStatusLM.Text = "No folder selected.";
+            SetCounters(0, 0);
+            return;
+        }
+
+        var filter = (txtFilter.Text ?? "*").Trim();
+        var patterns = filter.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                             .Select(s => s.Trim())
+                             .ToArray();
+        if (patterns.Length == 0) patterns = new[] { rbFiles.Checked ? "*.*" : "*" };
+
+        // Plain text for files -> substring match (auto *term*)
+        bool hasWildcard = filter.IndexOfAny(new[] { '*', '?' }) >= 0;
+        if (!hasWildcard && rbFiles.Checked && !string.IsNullOrWhiteSpace(filter) && filter != "*" && filter != "*.*")
+        {
+            var needle = filter.Trim('*');
+            patterns = new[] { "*" + needle + "*" };
+        }
+
+        IEnumerable<string> items = Enumerable.Empty<string>();
+        var opt = chkRecursive.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+        if (rbFiles.Checked)
+        {
+            foreach (var pat in patterns)
+                items = items.Concat(Directory.EnumerateFiles(_lmFolder, pat, opt));
+        }
+        else
+        {
+            // Directories: enumerate all and then apply a contains-name filter if provided
+            items = Directory.EnumerateDirectories(_lmFolder, "*", opt);
+            if (!string.IsNullOrWhiteSpace(filter) && filter != "*" && filter != "*.*")
+            {
+                var needle = filter.Trim('*').ToLowerInvariant();
+                items = items.Where(d => d.ToLowerInvariant().Contains(needle));
+            }
+        }
+
+        int added = 0;
+        foreach (var path in items)
+        {
+            AddRowLM(path);
+            added++;
+        }
+
+        lblStatusLM.Text = $"Loaded {added} item(s) from: {_lmFolder}";
+    }
+    catch (Exception ex)
+    {
+        lblStatusLM.Text = "Error: " + ex.Message;
+    }
+    finally
+    {
+        lvList.EndUpdate();
+    }
+
+    _ = RecalcCountersAsync();
+}
+}}
