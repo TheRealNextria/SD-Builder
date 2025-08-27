@@ -1,4 +1,5 @@
-// Version: v2.34 - Master + Summercart64_64DDIPL
+
+// Version: v2.31 - Master + Summercart64_64DDIPL (Designer refactor)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,9 +19,9 @@ using System.Windows.Forms;
 
 namespace SDBuilderWin
 {
-    public sealed class MainForm : Form
+    public sealed partial class MainForm : Form
     {
-        const string AppVersion = "v2.0";
+        const string AppVersion = "v2.31";
 
         // ---- URLs
         const string X_FW_Url  = "https://github.com/x-station/xstation-releases/releases/download/2.0.2/update202.zip";
@@ -28,12 +29,15 @@ namespace SDBuilderWin
         const string G_Url     = "https://github.com/emukidid/swiss-gc/releases/download/v0.6r1913/swiss_r1913.7z";
         const string G_7zr_Url = "https://www.7-zip.org/a/7zr.exe";
         const string SC64_Url  = "https://github.com/Polprzewodnikowy/N64FlashcartMenu/releases/download/rolling_release/sc64menu.n64";
-        const string EMU_PressF_Url = "https://github.com/celerizer/Press-F-Ultra/releases/download/r5/Press-F.z64";
-        const string EMU_SMS_Url   = "https://github.com/fhoedemakers/smsplus64/releases/download/v0.7/smsPlus64.z64";
-        const string EMU_Sodium_Url= "https://github.com/Hydr8gon/sodium64/releases/download/release/sodium64.zip";
-        const string EMU_Neon_Url  = "https://lambertjamesd.github.io/df88ffea-3a85-45bb-bc4f-d8a2e3282cab";
-        const string EMU_Misc_Url  = "https://drive.usercontent.google.com/download?id=1zmKO4MRZm-U-10AyK7Z0kZwfihctjrDf&export=download&authuser=0";
         const string SC64_64DD_Url = "https://64dd.org/download/sc64_64ddipl.zip";
+
+        // ---- Summercart64 Emulator URLs
+        const string SC64_EMU_GB   = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/gb.v64";
+        const string SC64_EMU_GBC  = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/gbc.v64";
+        const string SC64_EMU_NEON = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/neon64bu.rom";
+        const string SC64_EMU_PF   = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/Press-F.z64";
+        const string SC64_EMU_SMS  = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/smsPlus64.z64";
+        const string SC64_EMU_SOD  = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/sodium64.z64";
 
         // ---- Paths
         readonly string ScriptDir;
@@ -61,94 +65,93 @@ namespace SDBuilderWin
         readonly string[] RoboFlagsFile = new[] { "/IS","/IT","/COPY:DAT","/R:1","/W:1","/NFL","/NDL","/NJH","/NJS","/NP","/FFT" };
 
         // Settings (defaults)
+        string _lmFolder = string.Empty;
         int CopyTimeout = 20;
         int OverwriteTimeout = 10;
         string OverwriteAutoAction = "Yes"; // Yes|No
         bool ShowOnlyRemovable = true;
 
-        // UI top
-        ComboBox cmbDrives = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
-        Button btnRefresh  = new() { Text = "Refresh", Width = 80, Height = 28, Enabled = true };
-        Button btnStop     = new() { Text = "Stop", Width = 80, Height = 28, Enabled = false };
-        Button btnOpen     = new() { Text = "Open in Explorer", Width = 130, Height = 28, Enabled = true };
-        Button btnEject    = new() { Text = "Eject safely", Width = 110, Height = 28, Enabled = true };
-        TextBox txtLog     = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, WordWrap = false, Dock = DockStyle.Fill, Font = new Font("Consolas", 9) };
-        TabControl tabs    = new() { Dock = DockStyle.Fill };
-
-        // Settings controls
-        NumericUpDown numCopy = new() { Minimum = 0, Maximum = 999, Value = 20, Width = 80 };
-        NumericUpDown numOW   = new() { Minimum = 0, Maximum = 999, Value = 10, Width = 80 };
-        ComboBox cmbAuto      = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
-        CheckBox chkOnlyRemovable = new() { Text = "Only show removable drives (USB/SD)", AutoSize = true, Checked = true };
-
         CancellationTokenSource? _cts;
         System.Windows.Forms.Timer? _hotplugTimer;
 
-        enum Platform { Xstation, Saroo, Gamecube, Summercart64 }
+        
+        // Async Listmaker size scans
+        CancellationTokenSource? _lmScanCts;
+
+        // Listmaker UI performance
+        System.Windows.Forms.Timer? _lmDebounce;
+        bool _lmBulkChange;
+enum Platform { Xstation, Saroo, Gamecube, Summercart64 }
         enum ReplaceDecision { Yes, No, Cancel }
 
         public MainForm()
         {
-            // v2.31: log tip once on startup instead of showing per-tab label
-            Info("Tip: place your .txt files in the Gamelists folder next to this .exe.");
+            InitializeComponent();
+			
+			this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
+            
+            // debounce for Listmaker recalculation
+            _lmDebounce = new System.Windows.Forms.Timer { Interval = 250 };
+            _lmDebounce.Tick += async (_, __) => { _lmDebounce!.Stop(); await RecalcCountersAsync(); };// Title/version
+            Text = $"SD-Builder (GUI) {AppVersion}";
+            lblVersion.Text = AppVersion;
+            Info("Tip: place your .txt files in the GameLists folder next to this .exe.");
             ScriptDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            Text = $"SD-Builder (GUI) {AppVersion}";
-            Width = 1000;
-            Height = 700;
-            StartPosition = FormStartPosition.CenterScreen;
-            ShowIcon = true;
-            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-
-            // Top bar
-            var top = new Panel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(10, 8, 10, 8) };
-            var driveRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0), Padding = new Padding(0) };
-            var lblDrive = new Label { Text = "Destination drive:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) };
-            driveRow.Controls.Add(lblDrive);
-            driveRow.Controls.Add(cmbDrives);
-            btnRefresh.Margin = new Padding(8, 0, 0, 0);
+            // Wire top bar
             btnRefresh.Click += (_, __) => RefreshDrives(preserveSelection: true);
-            driveRow.Controls.Add(btnRefresh);
-            btnStop.Margin = new Padding(12, 0, 0, 0);
-            btnStop.Click += (_, __) => _cts?.Cancel();
-            driveRow.Controls.Add(btnStop);
-            btnOpen.Margin = new Padding(8, 0, 0, 0);
-            btnOpen.Click += (_, __) => OpenCurrentDriveInExplorer();
-            driveRow.Controls.Add(btnOpen);
-            btnEject.Margin = new Padding(8, 0, 0, 0);
-            btnEject.Click += (_, __) => _ = EjectCurrentDriveAsync();
-            driveRow.Controls.Add(btnEject);
-            top.Controls.Add(driveRow);
+            btnStop.Click    += (_, __) => _cts?.Cancel();
+            btnOpen.Click    += (_, __) => OpenCurrentDriveInExplorer();
+            btnEject.Click   += async (_, __) => await EjectCurrentDriveAsync();
+            cmbDrives.SelectedIndexChanged += (_, __) => UpdateDriveButtonsEnabled();
+            Resize += (_, __) => PositionVersionLabel();
 
-            // Version label (top-right)
-            var lblVersion = new Label { Text = AppVersion, AutoSize = true, ForeColor = Color.DimGray };
-            lblVersion.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            top.Controls.Add(lblVersion);
-            void PositionVersionLabel()
+            // Wire platform tabs
+            WirePlatformTab(
+                Platform.Xstation,
+                btnXstationFw, cmbXstationList, btnXstationRefreshLists, btnXstationOpenLists, btnXstationStart,
+                null, null
+            );
+            WirePlatformTab(
+                Platform.Saroo,
+                btnSarooFw, cmbSarooList, btnSarooRefreshLists, btnSarooOpenLists, btnSarooStart,
+                null, null
+            );
+            WirePlatformTab(
+                Platform.Gamecube,
+                btnGamecubeFw, cmbGamecubeList, btnGamecubeRefreshLists, btnGamecubeOpenLists, btnGamecubeStart,
+                null, null
+            );
+            WirePlatformTab(
+                Platform.Summercart64,
+                btnSC64Fw, cmbSC64List, btnSC64RefreshLists, btnSC64OpenLists, btnSC64Start,
+                btnSC64Install64DD, btnSC64InstallEmulators
+            );
+
+            // Wire Listmaker tab
+            WireListmakerTab();
+
+            // Wire settings
+            chkOnlyRemovable.CheckedChanged += (_, __) =>
             {
-                lblVersion.Left = top.ClientSize.Width - lblVersion.Width - 8;
-                lblVersion.Top  = 8;
-            }
-            lblVersion.BringToFront();
-            PositionVersionLabel();
-            top.Resize += (_, __) => PositionVersionLabel();
-            Shown += (_, __) => PositionVersionLabel();
+                ShowOnlyRemovable = chkOnlyRemovable.Checked;
+                SaveSettings();
+                RefreshDrives(preserveSelection: true);
+            };
+            cmbAuto.Items.Clear();
+            cmbAuto.Items.AddRange(new object[] { "Yes", "No" });
+            cmbAuto.SelectedIndex = 0;
+            btnSaveSettings.Click += (_, __) =>
+            {
+                CopyTimeout = (int)numCopy.Value;
+                OverwriteTimeout = (int)numOW.Value;
+                OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
+                SaveSettings();
+                Info("Settings saved.");
+            };
 
-            // Tabs
-            tabs.TabPages.Add(BuildPlatformTab("Xstation", Platform.Xstation));
-            tabs.TabPages.Add(BuildPlatformTab("Saroo", Platform.Saroo));
-            tabs.TabPages.Add(BuildPlatformTab("Gamecube", Platform.Gamecube));
-            tabs.TabPages.Add(BuildPlatformTab("Summercart64", Platform.Summercart64));
-            tabs.TabPages.Add(BuildListmakerTab());
-            tabs.TabPages.Add(BuildSettingsTab());
-
-            // Log
-            var grpLog = new GroupBox { Dock = DockStyle.Bottom, Height = 260, Text = "Log" };
-            grpLog.Controls.Add(txtLog);
-
-            Controls.AddRange(new Control[] { tabs, grpLog, top });
-
+            // Init
             Load += (_, __) =>
             {
                 Directory.CreateDirectory(GameListsDir);
@@ -156,13 +159,162 @@ namespace SDBuilderWin
                 RefreshDrives();
                 Info($"GameLists dir: {GameListsDir}");
                 UpdateDriveButtonsEnabled();
+                PositionVersionLabel();
             };
-
-            FormClosed += (_, __) => { if (_hotplugTimer != null) { _hotplugTimer.Stop(); _hotplugTimer.Dispose(); } };
-            cmbDrives.SelectedIndexChanged += (_, __) => UpdateDriveButtonsEnabled();
+            FormClosed += (_, __) => { if (_hotplugTimer != null) { _hotplugTimer.Stop(); _hotplugTimer.Dispose(); } _lmScanCts?.Cancel(); };
         }
 
-        // Logging
+        // ---------- Layout helpers that depend on Designer controls ----------
+
+        void PositionVersionLabel()
+        {
+            // Keep lblVersion top-right of topPanel
+            if (topPanel == null || lblVersion == null) return;
+            lblVersion.Left = topPanel.ClientSize.Width - lblVersion.Width - 8;
+            lblVersion.Top  = 8;
+            lblVersion.BringToFront();
+        }
+
+        void WirePlatformTab(
+            Platform p,
+            Button btnFw, ComboBox cmbList, Button btnRefreshLists, Button btnOpenLists, Button btnStart,
+            Button? btnInstall64DD, Button? btnInstallEmu)
+        {
+            btnRefreshLists.Click += (_, __) => { PopulateListCombo(cmbList); btnStart.Enabled = cmbList.Items.Count > 0; };
+            cmbList.SelectedIndexChanged += (_, __) => btnStart.Enabled = cmbList.SelectedIndex >= 0;
+            btnOpenLists.Click += (_, __) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{GameListsDir}\"") { UseShellExecute = true });
+
+            PopulateListCombo(cmbList);
+            btnStart.Enabled = cmbList.Items.Count > 0;
+
+            btnFw.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+            {
+                switch (p)
+                {
+                    case Platform.Xstation: await EnsureXstationFirmware(d, token); break;
+                    case Platform.Saroo:    await EnsureSarooFirmware(d, token);   break;
+                    case Platform.Gamecube: await EnsureGamecubeIPL(d, token);     break;
+                    case Platform.Summercart64: await EnsureSummercart64Firmware(d, token); break;
+                }
+            });
+
+            btnStart.Click += async (_, __) =>
+            {
+                var list = GetSelectedListPath(cmbList);
+                if (list == null) { Warn("No list selected."); return; }
+                await WithDriveJobAsync((d, token) => ReadListAndCopy(list, p, d, token));
+            };
+
+            if (p == Platform.Summercart64 && btnInstall64DD != null && btnInstallEmu != null)
+            {
+                btnInstall64DD.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+                {
+                    await InstallSummercart64Ipl(d, token);
+                });
+                btnInstallEmu.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+                {
+                    await InstallSummercart64Emulators(d, token);
+                });
+            }
+        }
+
+        void WireListmakerTab()
+        {
+            // Autoresize columns on show/resize
+            lvList.View = View.Details;
+            lvList.FullRowSelect = true;
+            lvList.HideSelection = false;
+            if (lvList.Columns.Count == 0)
+            {
+                lvList.Columns.Add("Path", -2, HorizontalAlignment.Left);
+                lvList.Columns.Add("Status", 100, HorizontalAlignment.Left);
+            }
+
+            void AutoSizeColumns()
+            {
+                if (lvList.Columns.Count == 0) return;
+                lvList.Columns[0].Width = Math.Max(120, lvList.ClientSize.Width - 120);
+                lvList.Columns[1].Width = 100;
+            }
+
+            lvList.Resize   += (_, __) => AutoSizeColumns();
+            tabListmaker.Enter += (_, __) => AutoSizeColumns();
+
+            // Handlers
+            btnChooseFolder.Click += (_, __) =>
+            {
+                using var dlg = new FolderBrowserDialog { ShowNewFolderButton = false };
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    lblStatusLM.Text = "Loading...";
+                    _lmFolder = dlg.SelectedPath;
+                    RefreshListmakerList();
+                }
+            };
+            btnRefreshLM.Click += (_, __) => RefreshListmakerList();
+            chkRecursive.CheckedChanged += (_, __) => RefreshListmakerList();
+            rbFiles.CheckedChanged += (_, __) => { if (rbFiles.Checked && txtFilter.Text.Trim() == "*") txtFilter.Text = "*.*"; RefreshListmakerList(); };
+            rbDirs.CheckedChanged  += (_, __) => { if (rbDirs.Checked && (txtFilter.Text.Trim() == "*.*" || txtFilter.Text.Trim().Length == 0)) txtFilter.Text = "*"; RefreshListmakerList(); };
+
+            btnCheckAll.Click += (_, __) => { _lmBulkChange = true; lvList.BeginUpdate(); try { for (int i=0;i<lvList.Items.Count;i++) lvList.Items[i].Checked = true; } finally { lvList.EndUpdate(); _lmBulkChange = false; } _lmDebounce?.Stop(); _lmDebounce?.Start(); };
+            btnUncheckAll.Click += (_, __) => { _lmBulkChange = true; lvList.BeginUpdate(); try { for (int i=0;i<lvList.Items.Count;i++) lvList.Items[i].Checked = false; } finally { lvList.EndUpdate(); _lmBulkChange = false; } _lmDebounce?.Stop(); _lmDebounce?.Start(); };
+            btnDeleteSelected.Click += (_, __) =>
+            {
+                if (lvList.SelectedItems.Count == 0) { MessageBox.Show(this, "No items selected to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+                foreach (ListViewItem it in lvList.SelectedItems.Cast<ListViewItem>().ToList()) lvList.Items.Remove(it);
+                lblStatusLM.Text = "Deleted selected items.";
+                _ = RecalcCountersAsync();
+            };
+
+            btnOpenTxt.Click += (_, __) =>
+            {
+                using var ofd = new OpenFileDialog { Title = "Open text file with paths", Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*", InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir };
+                if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+                string[] lines;
+                try
+                {
+                    lines = File.ReadAllLines(ofd.FileName, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false));
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "Could not read file:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                var existing = new HashSet<string>(lvList.Items.Cast<ListViewItem>().Select(it => NormalizePath(it.Text)), StringComparer.OrdinalIgnoreCase);
+
+                int added = 0, dupes = 0;
+                lvList.BeginUpdate();
+                foreach (var raw in lines)
+                {
+                    var line = raw.Trim();
+                    if (line.Length == 0) continue;
+                    if ((line.StartsWith("\"") && line.EndsWith("\"")) || (line.StartsWith("'") && line.EndsWith("'"))) line = line[1..^1];
+                    var norm = NormalizePath(line);
+                    if (existing.Contains(norm)) { dupes++; continue; }
+                    AddRowLM(norm);
+                    existing.Add(norm);
+                    added++;
+                }
+                lvList.EndUpdate();
+
+                lblStatusLM.Text = $"Loaded {added} new, skipped {dupes} duplicates from: {ofd.FileName}";
+                if (chkAutoValidate.Checked) ValidatePaths();
+                _ = RecalcCountersAsync();
+            };
+
+            btnValidateNow.Click += (_, __) => { ValidatePaths(); };
+            btnSaveTxt.Click += (_, __) => SaveTxt();
+
+            lvList.ItemChecked += (_, __) => { if (_lmBulkChange) return; _lmDebounce?.Stop(); _lmDebounce?.Start();};
+
+            // Defaults
+            lblStatusLM.Text = "Choose a folder or open a .txt file to begin.";
+            SetCounters(0, 0);
+        }
+
+        // ------------------- Logging -------------------
         void Info(string msg) => AppendLog(msg);
         void Warn(string msg) => AppendLog("[WARN] " + msg);
         void Error(string msg) => AppendLog("[ERROR] " + msg);
@@ -180,477 +332,39 @@ namespace SDBuilderWin
             btnOpen.Enabled = canDriveActions;
         }
 
-        // Platform tab
-        TabPage BuildPlatformTab(string title, Platform p)
+        // ------------------- Device change -------------------
+        protected override void WndProc(ref Message m)
         {
-            var page = new TabPage(title);
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            const int WM_DEVICECHANGE = 0x0219;
+            const int DBT_DEVICEARRIVAL = 0x8000;
+            const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
+            const int DBT_DEVNODES_CHANGED = 0x0007;
 
-            var row1 = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-            var row2 = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-
-            var btnFw = new Button { Text = "Check/Download firmware", Height = 34, Width = 240 };
-            Button? btnInstall64DD = null;
-            if (p == Platform.Summercart64) btnInstall64DD = new Button { Text = "Install 64DD IPL", Height = 34, Width = 160 };
-            Button? btnInstallEmu = null;
-            if (p == Platform.Summercart64) btnInstallEmu = new Button { Text = "Install Emulators", Height = 34, Width = 180 };
-            btnFw.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+            if (m.Msg == WM_DEVICECHANGE)
             {
-                switch (p)
-                {
-                    case Platform.Xstation: await EnsureXstationFirmware(d, token); break;
-                    case Platform.Saroo:    await EnsureSarooFirmware(d, token);   break;
-                    case Platform.Gamecube: await EnsureGamecubeIPL(d, token);     break;
-                case Platform.Summercart64: await EnsureSummercart64Firmware(d, token); break;
-                }
-            });
-
-            if (p == Platform.Summercart64 && btnInstall64DD != null)
-            {
-                btnInstall64DD.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
-                {
-                    await InstallSummercart64Ipl(d, token);
-                });
-
-                if (btnInstallEmu != null)
-                {
-                    btnInstallEmu.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
-                    {
-                        await InstallSummercart64Emulators(d, token);
-                    });
-                }
+                int evt = m.WParam.ToInt32();
+                if (evt == DBT_DEVICEARRIVAL || evt == DBT_DEVICEREMOVECOMPLETE || evt == DBT_DEVNODES_CHANGED) DebounceHotplugRefresh();
             }
-
-            var lblList = new Label { Text = "List:", AutoSize = true, Margin = new Padding(12, 8, 6, 0) };
-            var cmbList = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 360 };
-            var btnRefreshLists = new Button { Text = "Refresh lists", Height = 34, Width = 120 };
-            var btnOpenLists    = new Button { Text = "Open GameLists Folder", Height = 34, Width = 180 };
-            var pnlListButtons = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(8, 0, 0, 0), Padding = new Padding(0) };
-            pnlListButtons.Controls.Add(btnRefreshLists);
-            pnlListButtons.Controls.Add(new Label { AutoSize = false, Height = 4, Width = 1, Margin = new Padding(0) });
-            pnlListButtons.Controls.Add(btnOpenLists);
-            var btnStart = new Button { Text = "Start", Height = 34, Width = 100, Enabled = false };
-
-            // Wire list
-            btnRefreshLists.Click += (_, __) => { PopulateListCombo(cmbList); btnStart.Enabled = cmbList.Items.Count > 0; };
-            cmbList.SelectedIndexChanged += (_, __) => btnStart.Enabled = cmbList.SelectedIndex >= 0;
-            btnOpenLists.Click += (_, __) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{GameListsDir}\"") { UseShellExecute = true });
-
-            PopulateListCombo(cmbList);
-            btnStart.Enabled = cmbList.Items.Count > 0;
-
-            btnStart.Click += async (_, __) =>
-            {
-                var list = GetSelectedListPath(cmbList);
-                if (list == null) { Warn("No list selected."); return; }
-                await WithDriveJobAsync((d, token) => ReadListAndCopy(list, p, d, token));
-            };
-
-            // Layout
-            row1.Controls.Add(btnFw);
-            row1.Controls.Add(lblList);
-            row1.Controls.Add(cmbList);
-            row1.Controls.Add(pnlListButtons);
-            row1.Controls.Add(btnStart);
-            
-            if (p == Platform.Summercart64 && btnInstall64DD != null) row2.Controls.Add(btnInstall64DD);
-            if (p == Platform.Summercart64 && btnInstallEmu != null) row2.Controls.Add(btnInstallEmu);
-            root.Controls.Add(row1, 0, 0);
-            root.Controls.Add(row2, 0, 1);
-            page.Controls.Add(root);
-            return page;
+            base.WndProc(ref m);
         }
 
-        // Settings tab
-        TabPage BuildSettingsTab()
+        void DebounceHotplugRefresh()
         {
-            var page = new TabPage("Settings");
-            var pnl = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(10), AutoScroll = true };
-
-            pnl.Controls.Add(new Label { Text = "Drive list:", AutoSize = true });
-            pnl.Controls.Add(chkOnlyRemovable);
-            chkOnlyRemovable.CheckedChanged += (_, __) =>
+            if (_hotplugTimer == null)
             {
-                ShowOnlyRemovable = chkOnlyRemovable.Checked;
-                SaveSettings();
-                RefreshDrives(preserveSelection: true);
-            };
-
-            pnl.Controls.Add(new Label { Text = "Copy timeout (seconds):", AutoSize = true, Margin = new Padding(0, 12, 0, 0) });
-            pnl.Controls.Add(numCopy);
-
-            pnl.Controls.Add(new Label { Text = "Overwrite countdown (seconds):", AutoSize = true });
-            pnl.Controls.Add(numOW);
-
-            pnl.Controls.Add(new Label { Text = "Overwrite auto action:", AutoSize = true });
-            cmbAuto.Items.AddRange(new object[] { "Yes", "No" });
-            cmbAuto.SelectedIndex = 0;
-            pnl.Controls.Add(cmbAuto);
-
-            var btnSave = new Button { Text = "Save Settings", Width = 140, Height = 30, Margin = new Padding(0, 12, 0, 0) };
-            btnSave.Click += (_, __) =>
-            {
-                CopyTimeout = (int)numCopy.Value;
-                OverwriteTimeout = (int)numOW.Value;
-                OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
-                SaveSettings();
-                Info("Settings saved.");
-            };
-            pnl.Controls.Add(btnSave);
-
-            page.Controls.Add(pnl);
-            return page;
+                _hotplugTimer = new System.Windows.Forms.Timer { Interval = 800 };
+                _hotplugTimer.Tick += (_, __) =>
+                {
+                    _hotplugTimer!.Stop();
+                    RefreshDrives(preserveSelection: true);
+                    UpdateDriveButtonsEnabled();
+                };
+            }
+            _hotplugTimer.Stop();
+            _hotplugTimer.Start();
         }
 
-        // Listmaker tab
-        
-        TabPage BuildListmakerTab()
-        {
-            var page = new TabPage("Listmaker");
-
-            var btnChooseFolder = new Button { Text = "Choose Folder..." };
-            var txtFilter       = new TextBox { Text = "*.*", Width = 280 };
-            var chkRecursive    = new CheckBox { Text = "Include subfolders" };
-            var btnRefresh      = new Button { Text = "Refresh" };
-
-            var top1 = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8) };
-            top1.Controls.AddRange(new Control[] {
-                btnChooseFolder,
-                new Label{ Text="  Filter (e.g. *.iso;*.gcm or *Zelda*): ", AutoSize=true, Padding=new Padding(8,6,4,0)},
-                txtFilter, chkRecursive, btnRefresh
-            });
-
-            var rbFiles = new RadioButton { Text = "Files", Checked = true };
-            var rbDirs  = new RadioButton { Text = "Directories" };
-
-            var top2 = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8) };
-            top2.Controls.AddRange(new Control[] { new Label{ Text="Mode:", AutoSize=true, Padding=new Padding(0,6,4,0)}, rbFiles, rbDirs });
-
-            var lv = new ListView { CheckBoxes = true, View = View.Details, FullRowSelect = true, HideSelection = false, Dock = DockStyle.Fill };
-            lv.Columns.Add("Path", -2, HorizontalAlignment.Left);
-            lv.Columns.Add("Status", 100, HorizontalAlignment.Left);
-
-            var btnCheckAll       = new Button { Text = "Check All" };
-            var btnUncheckAll     = new Button { Text = "Uncheck All" };
-            var btnDeleteSelected = new Button { Text = "Delete Selected" };
-            var chkAutoValidate   = new CheckBox { Text = "Auto-validate paths" };
-            var btnValidateNow    = new Button { Text = "Validate Now" };
-            var btnOpenTxt        = new Button { Text = "Open .txt..." };
-
-            var btnSaveTxt        = new Button { Text = "Save checked...", AutoSize = true };
-
-            var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(8) };
-            bottom.Controls.AddRange(new Control[] { btnCheckAll, btnUncheckAll, btnDeleteSelected,
-                new Label{ Text="   ", AutoSize = true, Width = 16 },
-                chkAutoValidate, btnValidateNow,
-                new Label{ Text="   ", AutoSize = true, Width = 16 },
-                btnOpenTxt, btnSaveTxt
-            });
-
-            var status   = new StatusStrip();
-            var lblStatus= new ToolStripStatusLabel();              // left
-            var lblSep1  = new ToolStripStatusLabel("   |   ");
-            var lblSpacer= new ToolStripStatusLabel(); lblSpacer.Spring = true;
-            var lblCount = new ToolStripStatusLabel();              // "Checked: N"
-            var lblSep2  = new ToolStripStatusLabel("   |   ");
-            var lblSize  = new ToolStripStatusLabel();              // "Size: X"
-            lblSize.TextAlign = ContentAlignment.MiddleRight;
-            status.Items.AddRange(new ToolStripItem[] { lblStatus, lblSep1, lblSpacer, lblCount, lblSep2, lblSize });
-            status.Dock = DockStyle.Bottom;
-
-            page.Controls.AddRange(new Control[] { lv, top2, top1, bottom, status });
-
-            string folder = string.Empty;
-
-            // ---------- Helpers ----------
-            static IEnumerable<string> SplitPatterns(string patternText) =>
-                patternText.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                           .Select(s => s.Trim())
-                           .Where(s => s.Length > 0);
-
-            static bool MatchesGlob(string text, string glob)
-            {
-                string rx = "^" + Regex.Escape(glob).Replace(@"\*", ".*").Replace(@"\?", ".") + "$";
-                return Regex.IsMatch(text, rx, RegexOptions.IgnoreCase);
-            }
-
-            static string NormalizePath(string p) => p.Replace('/', '\\').TrimEnd('\\');
-
-            void AutoSizeColumns()
-            {
-                if (lv.Columns.Count == 0) return;
-                lv.Columns[0].Width = Math.Max(120, lv.ClientSize.Width - 120);
-                lv.Columns[1].Width = 100;
-            }
-
-            void AddRow(string path)
-            {
-                var item = new ListViewItem(path) { Checked = false };
-                item.SubItems.Add("");
-                lv.Items.Add(item);
-            }
-
-            // ---------- Live counters (local) ----------
-            System.Threading.CancellationTokenSource? calcCts = null;
-
-            void SetCounters(int checkedCount, long bytes)
-            {
-                lblCount.Text = $"Checked: {checkedCount}";
-                lblSize.Text  = $"Size: {FormatBytes(bytes)}";
-            }
-
-            string FormatBytes(long b)
-            {
-                string[] units = { "B", "KB", "MB", "GB", "TB" };
-                double v = b;
-                int u = 0;
-                while (v >= 1024 && u < units.Length - 1) { v /= 1024; u++; }
-                return u == 0 ? $"{b} {units[u]}" : $"{v:0.##} {units[u]}";
-            }
-
-            long SafeFileLength(string path)
-            {
-                try { var fi = new FileInfo(path); return fi.Exists ? fi.Length : 0L; }
-                catch { return 0L; }
-            }
-
-            long SafeDirLength(string path, System.Threading.CancellationToken token)
-            {
-                long total = 0;
-                try
-                {
-                    var stack = new Stack<string>();
-                    stack.Push(path);
-                    while (stack.Count > 0)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        var dir = stack.Pop();
-                        try
-                        {
-                            foreach (var f in Directory.EnumerateFiles(dir))
-                            {
-                                token.ThrowIfCancellationRequested();
-                                total += SafeFileLength(f);
-                            }
-                            foreach (var d in Directory.EnumerateDirectories(dir))
-                            {
-                                token.ThrowIfCancellationRequested();
-                                stack.Push(d);
-                            }
-                        }
-                        catch { /* ignore inaccessible subpaths */ }
-                    }
-                }
-                catch { /* ignore */ }
-                return total;
-            }
-
-            async Task RecalcCountersAsync()
-            {
-                calcCts?.Cancel();
-                calcCts = new System.Threading.CancellationTokenSource();
-                var token = calcCts.Token;
-
-                var items = lv.Items.Cast<ListViewItem>()
-                    .Where(it => it.Checked)
-                    .Select(it => it.Text)
-                    .ToList();
-                int checkedCount = items.Count;
-
-                SetCounters(checkedCount, 0);
-
-                long bytes = 0;
-                try
-                {
-                    await Task.Run(() =>
-                    {
-                        foreach (var p in items)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            if (rbFiles.Checked)
-                            {
-                                bytes += SafeFileLength(p);
-                            }
-                            else
-                            {
-                                if (Directory.Exists(p)) bytes += SafeDirLength(p, token);
-                            }
-                        }
-                    }, token);
-                }
-                catch (OperationCanceledException) { return; }
-
-                if (!token.IsCancellationRequested) SetCounters(checkedCount, bytes);
-            }
-
-            void RefreshList()
-            {
-                lv.BeginUpdate();
-                lv.Items.Clear();
-
-                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
-                {
-                    lblStatus.Text = "No folder selected.";
-                    lv.EndUpdate();
-                    SetCounters(0, 0);
-                    return;
-                }
-
-                var rawPatterns = SplitPatterns(txtFilter.Text).ToList();
-                List<string> patterns;
-                if (rbDirs.Checked)
-                {
-                    if (rawPatterns.Count == 0 || rawPatterns.All(p => p.Contains('.'))) patterns = new List<string> { "*" };
-                    else patterns = rawPatterns;
-                }
-                else
-                {
-                    patterns = rawPatterns.Count == 0 ? new List<string> { "*.*" } : rawPatterns;
-                }
-
-                int count = 0;
-                try
-                {
-                    var opt = chkRecursive.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                    if (rbFiles.Checked)
-                    {
-                        foreach (var file in Directory.EnumerateFiles(folder, "*", opt))
-                            if (patterns.Any(p => MatchesGlob(Path.GetFileName(file), p))) { AddRow(NormalizePath(file)); count++; }
-                    }
-                    else
-                    {
-                        foreach (var dir in Directory.EnumerateDirectories(folder, "*", opt))
-                            if (patterns.Any(p => MatchesGlob(Path.GetFileName(dir), p))) { AddRow(NormalizePath(dir)); count++; }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(page, "Could not read folder:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-
-                lv.EndUpdate();
-                lblStatus.Text = $"Loaded {count} {(rbDirs.Checked ? "directories" : "files")} from: {folder}";
-
-                if (chkAutoValidate.Checked) ValidatePaths();
-                _ = RecalcCountersAsync();
-            }
-
-            void ValidatePaths()
-            {
-                foreach (ListViewItem it in lv.Items)
-                {
-                    var p = NormalizePath(it.Text);
-                    bool exists = rbDirs.Checked ? Directory.Exists(p) : File.Exists(p);
-                    it.SubItems[1].Text = exists ? "" : "missing";
-                    it.ForeColor = exists ? SystemColors.WindowText : Color.Red;
-                }
-                _ = RecalcCountersAsync();
-            }
-
-            List<string> GatherForSave()
-            {
-                var list = new List<string>();
-                if (lv.CheckedItems == null || lv.CheckedItems.Count == 0)
-                {
-                    MessageBox.Show(page, "Check one or more items in the list to save.", "Nothing checked",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return list;
-                }
-                foreach (ListViewItem it in lv.CheckedItems)
-                    list.Add(NormalizePath(it.Text));
-                return list;
-            }
-
-void SaveTxt()
-            {
-                var paths = GatherForSave();
-                if (paths.Count == 0) { return; }
-                using var sfd = new SaveFileDialog { Title = "Save file list", Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*", DefaultExt = "txt", AddExtension = true };
-                sfd.InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir;
-                if (sfd.ShowDialog(page) != DialogResult.OK) return;
-                try
-                {
-                    File.WriteAllLines(sfd.FileName, paths, new UTF8Encoding(false));
-                    MessageBox.Show(page, $"Saved {paths.Count} paths to:\n{sfd.FileName}", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(page, "Could not save file:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-
-            // ---------- Events ----------
-            btnChooseFolder.Click += (_, __) => { using var dlg = new FolderBrowserDialog { ShowNewFolderButton = false }; if (dlg.ShowDialog(page) == DialogResult.OK) { folder = dlg.SelectedPath; RefreshList(); } };
-            btnRefresh.Click += (_, __) => RefreshList();
-            chkRecursive.CheckedChanged += (_, __) => RefreshList();
-            rbFiles.CheckedChanged += (_, __) => { if (rbFiles.Checked && txtFilter.Text.Trim() == "*") txtFilter.Text = "*.*"; RefreshList(); };
-            rbDirs.CheckedChanged  += (_, __) => { if (rbDirs.Checked && (txtFilter.Text.Trim() == "*.*" || txtFilter.Text.Trim().Length == 0)) txtFilter.Text = "*"; RefreshList(); };
-
-            btnCheckAll.Click += (_, __) => { foreach (ListViewItem it in lv.Items) it.Checked = true; _ = RecalcCountersAsync(); };
-            btnUncheckAll.Click += (_, __) => { foreach (ListViewItem it in lv.Items) it.Checked = false; _ = RecalcCountersAsync(); };
-            btnDeleteSelected.Click += (_, __) =>
-            {
-                if (lv.SelectedItems.Count == 0) { MessageBox.Show(page, "No items selected to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                foreach (ListViewItem it in lv.SelectedItems.Cast<ListViewItem>().ToList()) lv.Items.Remove(it);
-                lblStatus.Text = "Deleted selected items.";
-                _ = RecalcCountersAsync();
-            };
-
-            btnOpenTxt.Click += (_, __) =>
-            {
-                using var ofd = new OpenFileDialog { Title = "Open text file with paths", Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*", InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir };
-                if (ofd.ShowDialog(page) != DialogResult.OK) return;
-
-                string[] lines;
-                try
-                {
-                    lines = File.ReadAllLines(ofd.FileName, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false));
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(page, "Could not read file:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                var existing = new HashSet<string>(lv.Items.Cast<ListViewItem>().Select(it => NormalizePath(it.Text)), StringComparer.OrdinalIgnoreCase);
-
-                int added = 0, dupes = 0;
-                lv.BeginUpdate();
-                foreach (var raw in lines)
-                {
-                    var line = raw.Trim();
-                    if (line.Length == 0) continue;
-                    if ((line.StartsWith("\"") && line.EndsWith("\"")) || (line.StartsWith("'") && line.EndsWith("'"))) line = line[1..^1];
-                    var norm = NormalizePath(line);
-                    if (existing.Contains(norm)) { dupes++; continue; }
-                    AddRow(norm);
-                    existing.Add(norm);
-                    added++;
-                }
-                lv.EndUpdate();
-
-                lblStatus.Text = $"Loaded {added} new, skipped {dupes} duplicates from: {ofd.FileName}";
-                if (chkAutoValidate.Checked) ValidatePaths();
-                _ = RecalcCountersAsync();
-            };
-
-            btnValidateNow.Click += (_, __) => { ValidatePaths(); };
-            btnSaveTxt.Click += (_, __) => SaveTxt();
-
-            lv.ItemChecked += (_, __) => { _ = RecalcCountersAsync(); };
-            lv.Resize      += (_, __) => AutoSizeColumns();
-            page.Enter     += (_, __) => AutoSizeColumns();
-
-            lblStatus.Text = "Choose a folder or open a .txt file to begin.";
-            SetCounters(0, 0);
-
-            return page;
-        }
-
-        // Drive helpers
+        // ------------------- Drives -------------------
         void RefreshDrives(bool preserveSelection = false)
         {
             string? prev = preserveSelection ? CurrentDriveLetter() : null;
@@ -701,38 +415,7 @@ void SaveTxt()
             return Directory.Exists(path) ? drive.ToUpper() : null;
         }
 
-        protected override void WndProc(ref Message m)
-        {
-            const int WM_DEVICECHANGE = 0x0219;
-            const int DBT_DEVICEARRIVAL = 0x8000;
-            const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
-            const int DBT_DEVNODES_CHANGED = 0x0007;
-
-            if (m.Msg == WM_DEVICECHANGE)
-            {
-                int evt = m.WParam.ToInt32();
-                if (evt == DBT_DEVICEARRIVAL || evt == DBT_DEVICEREMOVECOMPLETE || evt == DBT_DEVNODES_CHANGED) DebounceHotplugRefresh();
-            }
-            base.WndProc(ref m);
-        }
-
-        void DebounceHotplugRefresh()
-        {
-            if (_hotplugTimer == null)
-            {
-                _hotplugTimer = new System.Windows.Forms.Timer { Interval = 800 };
-                _hotplugTimer.Tick += (_, __) =>
-                {
-                    _hotplugTimer!.Stop();
-                    RefreshDrives(preserveSelection: true);
-                    UpdateDriveButtonsEnabled();
-                };
-            }
-            _hotplugTimer.Stop();
-            _hotplugTimer.Start();
-        }
-
-        // Job wrapper
+        // ------------------- Post-run dialog -------------------
         async Task WithDriveJobAsync(Func<string, CancellationToken, Task> action)
         {
             var d = CurrentDriveLetter();
@@ -753,7 +436,6 @@ void SaveTxt()
             }
         }
 
-        // Post-run prompt
         async Task PostRunPromptAsync(string driveLetter)
         {
             using var dlg = new Form { Text = "Completed", Width = 420, Height = 180, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
@@ -853,7 +535,8 @@ void SaveTxt()
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool DeviceIoControl(SafeFileHandle hDevice, uint dwIoControlCode, IntPtr lpInBuffer, int nInBufferSize, IntPtr lpOutBuffer, int nOutBufferSize, out int lpBytesReturned, IntPtr lpOverlapped);
 
-        // Firmware
+        // ------------------- Firmware flows (unchanged) -------------------
+// Firmware
         async Task EnsureXstationFirmware(string destDrive, CancellationToken token)
         {
             var xstationDir = $@"{destDrive}:\00xstation";
@@ -944,7 +627,7 @@ void SaveTxt()
 
         async Task EnsureGamecubeIPL(string destDrive, CancellationToken token)
         {
-            var gcBase = $@"{destDrive}:\\";
+            var gcBase = $@"{destDrive}:\";
             Directory.CreateDirectory(gcBase);
             var ipl = Path.Combine(gcBase, "IPL.dol");
             if (File.Exists(ipl)) { Info("Swiss firmware present."); return; }
@@ -1063,29 +746,33 @@ Info("64DD IPL installed (menu folder at SD root).");
 EnsureRemoved(work);
         }
 
+
 async Task InstallSummercart64Emulators(string destDrive, CancellationToken token)
 {
-    var root = $@"{destDrive}:\";
-    var destMenu = System.IO.Path.Combine(root, "menu");
-    var destEmu  = System.IO.Path.Combine(destMenu, "Emulators");
+    var root     = destDrive + @":\";
+    var destMenu = Path.Combine(root, "menu");
+    var destEmu  = Path.Combine(destMenu, "Emulators");
 
-    // Pre-check: required emulator files
-    string[] required = { "Press-F.z64", "smsPlus64.z64", "sodium64.z64", "neon64bu.rom" };
-    bool ExistsAll(string baseDir)
+    string[] required =
     {
-        if (!System.IO.Directory.Exists(baseDir)) return false;
-        var names = new HashSet<string>(
-            System.IO.Directory.GetFiles(baseDir)
-                .Select(System.IO.Path.GetFileName)
-                .Where(n => n is not null)
-                .Select(n => n!),
-            StringComparer.OrdinalIgnoreCase);
+        "Press-F.z64",
+        "smsPlus64.z64",
+        "sodium64.z64",
+        "neon64bu.rom",
+        "gb.v64",
+        "gbc.v64",
+    };
+
+    bool ExistsAll(string dir)
+    {
+        if (!Directory.Exists(dir)) return false;
+        var names = new HashSet<string>(Directory.GetFiles(dir).Select(Path.GetFileName).Where(n => n is not null).Select(n => n!), StringComparer.OrdinalIgnoreCase);
         return required.All(r => names.Contains(r));
     }
 
     if (ExistsAll(destEmu))
     {
-        Info("Emulators already installed.");
+        Info(@"Emulators already installed in \menu\Emulators");
         return;
     }
 
@@ -1095,77 +782,80 @@ async Task InstallSummercart64Emulators(string destDrive, CancellationToken toke
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
         return;
 
-    // Prepare work dir
-    var work = System.IO.Path.Combine(TempRoot, "sc64_emulators");
+    var work    = Path.Combine(TempRoot, "sc64_emulators");
+    var dlDir   = Path.Combine(work, "dl");
+    var extract = Path.Combine(work, "extracted");
+
     EnsureRemoved(work);
-    System.IO.Directory.CreateDirectory(work);
+    Directory.CreateDirectory(dlDir);
+    Directory.CreateDirectory(extract);
 
-    // Download all archives/binaries
-    var d1 = System.IO.Path.Combine(work, "Press-F.z64");
-    var d2 = System.IO.Path.Combine(work, "smsPlus64.z64");
-    var d3 = System.IO.Path.Combine(work, "sodium64.zip");
-    var d4 = System.IO.Path.Combine(work, "neon64bu.rom");
-    var d5 = System.IO.Path.Combine(work, "misc.bin"); // Google Drive link
-
-    Info("Downloading emulators...");
-    await DownloadFileAsync(EMU_PressF_Url, d1, token);
-    await DownloadFileAsync(EMU_SMS_Url,    d2, token);
-    await DownloadFileAsync(EMU_Sodium_Url, d3, token);
-    await DownloadFileAsync(EMU_Neon_Url,   d4, token);
-    await DownloadFileAsync(EMU_Misc_Url,   d5, token);
-
-    // Extract ZIPs
-    var extractRoot = System.IO.Path.Combine(work, "extracted");
-    System.IO.Directory.CreateDirectory(extractRoot);
-    if (System.IO.File.Exists(d3)) ExpandZip(d3, System.IO.Path.Combine(extractRoot, "sodium64"));
-
-    // Ensure destination exists
-    System.IO.Directory.CreateDirectory(destEmu);
-
-    // Helper to try copy a named file from work/extracted to dest
-    async Task<bool> TryCopy(string fileName)
+    var items = new (string Url, string TargetName)[]
     {
-        // direct hits in work
-        var direct = System.IO.Path.Combine(work, fileName);
-        if (System.IO.File.Exists(direct))
+        (SC64_EMU_GB,   "gb.v64"),
+        (SC64_EMU_GBC,  "gbc.v64"),
+        (SC64_EMU_NEON, "neon64bu.rom"),
+        (SC64_EMU_PF,   "Press-F.z64"),
+        (SC64_EMU_SMS,  "smsPlus64.z64"),
+        (SC64_EMU_SOD,  "sodium64.z64"),
+    };
+
+    Info("Downloading emulator set...");
+    foreach (var (url, tgt) in items)
+    {
+        token.ThrowIfCancellationRequested();
+
+        var fileNameFromUrl = Path.GetFileName(new Uri(url).LocalPath);
+        var dlPath = Path.Combine(dlDir, fileNameFromUrl);
+        await DownloadFileAsync(url, dlPath, token);
+
+        if (Path.GetExtension(dlPath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
         {
-            await RoboCopyFile(direct, destEmu, token);
-            return true;
+            var outDir = Path.Combine(extract, Path.GetFileNameWithoutExtension(dlPath));
+            Directory.CreateDirectory(outDir);
+            ExpandZip(dlPath, outDir);
         }
-        // search in extracted
-        var found = System.IO.Directory.EnumerateFiles(extractRoot, fileName, System.IO.SearchOption.AllDirectories).FirstOrDefault();
-        if (found != null)
+    }
+
+    Directory.CreateDirectory(destMenu);
+    Directory.CreateDirectory(destEmu);
+
+    async Task<bool> CopyIfFoundAsync(string preferredName, CancellationToken ct)
+    {
+        foreach (var p in Directory.EnumerateFiles(dlDir, "*", SearchOption.TopDirectoryOnly))
         {
-            await RoboCopyFile(found, destEmu, token);
-            return true;
+            if (string.Equals(Path.GetFileName(p), preferredName, StringComparison.OrdinalIgnoreCase))
+            {
+                await RoboCopyFile(p, destEmu, ct);
+                return true;
+            }
         }
-        // search in work recursively
-        found = System.IO.Directory.EnumerateFiles(work, fileName, System.IO.SearchOption.AllDirectories).FirstOrDefault();
-        if (found != null)
+
+        if (Directory.Exists(extract))
         {
-            await RoboCopyFile(found, destEmu, token);
-            return true;
+            var hit = Directory.EnumerateFiles(extract, preferredName, SearchOption.AllDirectories).FirstOrDefault();
+            if (hit != null)
+            {
+                await RoboCopyFile(hit, destEmu, ct);
+                return true;
+            }
         }
+
         return false;
     }
 
-    // Copy required files
-    bool ok1 = await TryCopy("Press-F.z64");
-    bool ok2 = await TryCopy("smsPlus64.z64");
-    bool ok3 = await TryCopy("sodium64.z64");
-    bool ok4 = await TryCopy("neon64bu.rom");
-
-    if (!(ok1 && ok2 && ok3 && ok4))
+    foreach (var name in required)
     {
-        Info("Some emulator files were not found after download. Please check sources.");
-    }
-    else
-    {
-        Info($"Emulators installed → {destEmu}");
+        token.ThrowIfCancellationRequested();
+        var ok = await CopyIfFoundAsync(name, token);
+        if (!ok)
+            Info($"[WARN] Could not locate a payload for: {name}.");
     }
 
+    Info(@"Emulators installed to \menu\Emulators");
     EnsureRemoved(work);
 }
+
 
 
         // List-driven copy
@@ -1448,6 +1138,276 @@ return;
             catch (Exception ex) { Warn("Could not enumerate GameLists: " + ex.Message); }
         }
         string? GetSelectedListPath(ComboBox combo) => combo.SelectedItem is ComboItem ci ? ci.FullPath : null;
-        sealed class ComboItem { public string Text { get; } public string FullPath { get; } public ComboItem(string text, string fullPath) { Text = text; FullPath = fullPath; } public override string ToString() => Text; }
+        sealed class ComboItem { public string Text { get; } public string FullPath { get; } public ComboItem(string text, string fullPath) { Text = text; FullPath = fullPath; } public override string ToString() => Text; 
+        }
+// ------------------- Listmaker helpers -------------------
+        void UpdateLmTotalsFromItems()
+        {
+            long total = 0;
+            int count = 0;
+            foreach (ListViewItem it in lvList.Items)
+            {
+                if (!it.Checked) continue;
+                count++;
+                if (it.Tag is long sz) total += sz;
+            }
+            SetCounters(count, total);
+        }
+
+        void SetCounters(int checkedCount, long totalBytes)
+        {
+            if (lblCountLM == null || lblSizeLM == null) return;
+            lblCountLM.Text = $"Checked: {checkedCount}";
+            lblSizeLM.Text  = $"Size: {FormatSize(totalBytes)}";
+        }
+
+        string FormatSize(long bytes)
+        {
+            const long KB = 1024, MB = KB*1024, GB = MB*1024, TB = GB*1024;
+            if (bytes >= TB) return $"{bytes/(double)TB:0.##} TB";
+            if (bytes >= GB) return $"{bytes/(double)GB:0.##} GB";
+            if (bytes >= MB) return $"{bytes/(double)MB:0.##} MB";
+            if (bytes >= KB) return $"{bytes/(double)KB:0.##} KB";
+            return $"{bytes} B";
+        }
+		long SafeFileLength(string path)
+{
+    try { return new FileInfo(path).Length; }
+    catch { return 0; }
+}
+
+long SafeDirLength(string root, CancellationToken token, bool recursive)
+{
+    long total = 0;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+try
+    {
+        if (!recursive)
+        {
+            foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
+            {
+                token.ThrowIfCancellationRequested();
+                try { total += new FileInfo(f).Length; } catch { }
+            }
+            return total;
+        }
+
+        var stack = new Stack<string>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            var dir = stack.Pop();
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(dir))
+                {
+                    token.ThrowIfCancellationRequested();
+                    try { total += new FileInfo(f).Length; } catch { }
+                }
+                foreach (var d in Directory.EnumerateDirectories(dir))
+                {
+                    token.ThrowIfCancellationRequested();
+                    stack.Push(d);
+                }
+            }
+            catch { /* skip inaccessible subpaths */ }
+        }
+    }
+    catch { }
+    return total;
+}
+
+
+        string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            var p = path.Trim();
+            if ((p.StartsWith("\"") && p.EndsWith("\"")) || (p.StartsWith("'") && p.EndsWith("'")))
+                p = p[1..^1];
+            return p.Replace('/', '\\').Trim();
+        }
+
+        void AddRowLM(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            var it = new ListViewItem(path) { Checked = false };
+            it.SubItems.Add(""); // status column
+            lvList.Items.Add(it);
+        }
+
+        async Task RecalcCountersAsync()
+{
+    // cancel any previous scan
+    _lmScanCts?.Cancel();
+    _lmScanCts = new CancellationTokenSource();
+    var token = _lmScanCts.Token;
+
+    // snapshot checked rows
+    var rows = lvList.Items.Cast<ListViewItem>().Where(it => it.Checked).ToList();
+
+    // prime: clear Tag and set status
+    foreach (var it in rows)
+    {
+        var pth = it.Text;
+        bool exists = rbFiles.Checked ? File.Exists(pth) : Directory.Exists(pth);
+        it.Tag = null;
+        it.SubItems[1].Text = exists ? "scanning…" : "Missing";
+    }
+    SetCounters(rows.Count, 0);
+
+    // kick off per-item tasks (throttled)
+    var tasks = new List<Task>();
+    int parallel = Environment.ProcessorCount > 4 ? 4 : 2;
+    using (var sem = new System.Threading.SemaphoreSlim(parallel, parallel))
+    {
+        foreach (var it in rows)
+        {
+            await sem.WaitAsync(token).ConfigureAwait(false);
+            var itemRef = it;
+            var task = Task.Run(() =>
+            {
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    var p = itemRef.Text;
+                    long sz = 0;
+                    if (rbFiles.Checked)
+                    {
+                        if (File.Exists(p)) sz = SafeFileLength(p);
+                    }
+                    else
+                    {
+                        if (Directory.Exists(p)) sz = SafeDirLength(p, token, recursive: chkRecursive.Checked);
+                    }
+                    // post result
+                    if (!IsDisposed && lvList.IsHandleCreated)
+                    {
+                        try
+                        {
+                            lvList.BeginInvoke(new Action(() =>
+                            {
+                                if (itemRef.ListView == null) return;
+                                itemRef.Tag = sz;
+                                var existsNow = rbFiles.Checked ? File.Exists(p) : Directory.Exists(p);
+                                itemRef.SubItems[1].Text = existsNow ? FormatSize(sz) : "Missing";
+                                UpdateLmTotalsFromItems();
+                            }));
+                        }
+                        catch { }
+                    }
+                }
+                catch { /* ignore cancellations/errors per item */ }
+                finally
+                {
+                    sem.Release();
+                }
+            }, token);
+            tasks.Add(task);
+        }
+        try { await Task.WhenAll(tasks); } catch { /* cancellation */ }
+    }
+}
+
+        void ValidatePaths()
+        {
+            int ok = 0, missing = 0;
+            lvList.BeginUpdate();
+            foreach (ListViewItem it in lvList.Items)
+            {
+                var p = it.Text;
+                bool exists = rbFiles.Checked ? File.Exists(p) : Directory.Exists(p);
+                it.SubItems[1].Text = exists ? "OK" : "Missing";
+                if (exists) ok++; else missing++;
+            }
+            lvList.EndUpdate();
+            lblStatusLM.Text = $"Validated: {ok} OK, {missing} missing.";
+        }
+
+        void SaveTxt()
+        {
+                        // Block saving when nothing is checked
+            int checkedCount = 0;
+            foreach (ListViewItem it in lvList.Items)
+                if (it.Checked) checkedCount++;
+            if (checkedCount == 0)
+            {
+                MessageBox.Show(this, "No checked items to save.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+using var sfd = new SaveFileDialog
+            {
+                Title = "Save checked items",
+                Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+                InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir,
+                FileName = "list.txt"
+            };
+            if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+            var lines = new List<string>();
+            foreach (ListViewItem it in lvList.Items)
+                if (it.Checked) lines.Add(it.Text);
+
+            File.WriteAllLines(sfd.FileName, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier:false));
+            lblStatusLM.Text = $"Saved {lines.Count} items to: {sfd.FileName}";
+        }
+
+        void RefreshListmakerList()
+        {
+            lvList.BeginUpdate();
+            try
+            {
+                lvList.Items.Clear();
+                if (string.IsNullOrWhiteSpace(_lmFolder) || !Directory.Exists(_lmFolder))
+                {
+                    lblStatusLM.Text = "No folder selected.";
+                    SetCounters(0, 0);
+                    return;
+                }
+
+                var filter = (txtFilter.Text ?? "*").Trim();
+                var patterns = filter.Split(new[]{';','|'}, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
+                if (patterns.Length == 0) patterns = new[] { rbFiles.Checked ? "*.*" : "*" };
+
+                IEnumerable<string> items = Enumerable.Empty<string>();
+                var opt = chkRecursive.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+                if (rbFiles.Checked)
+                {
+                    foreach (var pat in patterns)
+                        items = items.Concat(Directory.EnumerateFiles(_lmFolder, pat, opt));
+                }
+                else
+                {
+                    // Directories: ignore pattern and just enumerate all, with optional name filter
+                    items = Directory.EnumerateDirectories(_lmFolder, "*", opt);
+                    if (filter != "*" && filter != "*.*")
+                    {
+                        var needle = filter.Trim('*').ToLowerInvariant();
+                        items = items.Where(d => d.ToLowerInvariant().Contains(needle));
+                    }
+                }
+
+                int added = 0;
+                foreach (var it in items)
+                {
+                    AddRowLM(it);
+                    added++;
+                }
+
+                lblStatusLM.Text = $"Loaded {added} item(s) from: {_lmFolder}";
+            }
+            catch (Exception ex)
+            {
+                lblStatusLM.Text = "Error: " + ex.Message;
+            }
+            finally
+            {
+                lvList.EndUpdate();
+            }
+            _ = RecalcCountersAsync();
+        }
+
     }
 }

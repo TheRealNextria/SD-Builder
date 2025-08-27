@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -24,8 +24,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Code files -->
     <Compile Include="Program.cs" />
     <Compile Include="MainForm.cs" />
+    <Compile Include="MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Include="MainForm.resx" />
+
+    <!-- Only keep this if MainForm.resx actually exists -->
+    <!--
+    <EmbeddedResource Include="MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+    -->
+
+    <!-- Non-code assets -->
     <None Include="app.manifest" />
     <None Include="Assets\SDBuilder_Icon.ico" />
   </ItemGroup>
