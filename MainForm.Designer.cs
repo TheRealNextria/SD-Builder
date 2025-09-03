@@ -37,15 +37,54 @@ namespace SDBuilderWin
         private Button btnXstationRefreshLists;
         private Button btnXstationOpenLists;
         private Button btnXstationStart;
-
-        // Saroo
+// Saroo listmaker (mirrors Xstation)
+        private System.Windows.Forms.ListView lvSrList;
+        private System.Windows.Forms.ColumnHeader colPathSR;
+        private System.Windows.Forms.ColumnHeader colStatusSR;
+        private System.Windows.Forms.FlowLayoutPanel sTop;
+        private System.Windows.Forms.Label lblSrMode;
+        private System.Windows.Forms.RadioButton rbSrFiles;
+        private System.Windows.Forms.RadioButton rbSrDirs;
+        private System.Windows.Forms.Button btnSrChoose;
+        private System.Windows.Forms.Button btnSrCheckAll;
+        private System.Windows.Forms.Button btnSrUncheckAll;
+        private System.Windows.Forms.Button btnSrStart;
+        private System.Windows.Forms.StatusStrip statusStripSR;
+        private System.Windows.Forms.ToolStripStatusLabel lblStatusSR;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepSR1;
+        private System.Windows.Forms.ToolStripStatusLabel lblSpacerSR;
+        private System.Windows.Forms.ToolStripStatusLabel lblCountSR;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepSR2;
+        private System.Windows.Forms.ToolStripStatusLabel lblSizeSR;
+// Saroo
         private Button btnSarooFw;
         private ComboBox cmbSarooList;
         private Button btnSarooRefreshLists;
         private Button btnSarooOpenLists;
         private Button btnSarooStart;
 
-        // Gamecube
+        
+        // Gamecube listmaker (mirrors Xstation)
+        private System.Windows.Forms.ListView lvGcList;
+        private System.Windows.Forms.ColumnHeader colPathGC;
+        private System.Windows.Forms.ColumnHeader colStatusGC;
+        private System.Windows.Forms.FlowLayoutPanel gcTop;
+        private System.Windows.Forms.Label lblGcMode;
+        private System.Windows.Forms.RadioButton rbGcFiles;
+        private System.Windows.Forms.RadioButton rbGcDirs;
+        private System.Windows.Forms.Button btnGcChoose;
+        private System.Windows.Forms.Button btnGcCheckAll;
+        private System.Windows.Forms.Button btnGcUncheckAll;
+        private System.Windows.Forms.Button btnGcStart;
+        private System.Windows.Forms.StatusStrip statusStripGC;
+        private System.Windows.Forms.ToolStripStatusLabel lblStatusGC;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepGC1;
+        private System.Windows.Forms.ToolStripStatusLabel lblSpacerGC;
+        private System.Windows.Forms.ToolStripStatusLabel lblCountGC;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepGC2;
+        private System.Windows.Forms.ToolStripStatusLabel lblSizeGC;
+    // Gamecube
+        private Button btnGamecubeCheats;
         private Button btnGamecubeFw;
         private ComboBox cmbGamecubeList;
         private Button btnGamecubeRefreshLists;
@@ -86,10 +125,15 @@ namespace SDBuilderWin
 
         // Settings
         private CheckBox chkOnlyRemovable;
+        private CheckBox chkEjectPrompt;
         private NumericUpDown numCopy;
         private NumericUpDown numOW;
         private ComboBox cmbAuto;
         private Button btnSaveSettings;
+        private System.Windows.Forms.ColumnHeader colPathLM;
+        private System.Windows.Forms.ColumnHeader colStatusLM;
+        private System.Windows.Forms.ColumnHeader colPathXS;
+        private System.Windows.Forms.ColumnHeader colStatusXS;
 
         private void InitializeComponent()
         {
@@ -114,6 +158,24 @@ namespace SDBuilderWin
             btnXstationOpenLists = new Button();
             btnXstationStart = new Button();
             xFill = new Panel();
+            lvXsList = new ListView();
+            colPathXS = new ColumnHeader();
+            colStatusXS = new ColumnHeader();
+            xsTop = new FlowLayoutPanel();
+            lblXsMode = new Label();
+            rbXsFiles = new RadioButton();
+            rbXsDirs = new RadioButton();
+            btnXsChoose = new Button();
+            btnXsCheckAll = new Button();
+            btnXsUncheckAll = new Button();
+            btnXsStart = new Button();
+            statusStripXS = new StatusStrip();
+            lblStatusXS = new ToolStripStatusLabel();
+            lblSepXS1 = new ToolStripStatusLabel();
+            lblSpacerXS = new ToolStripStatusLabel();
+            lblCountXS = new ToolStripStatusLabel();
+            lblSepXS2 = new ToolStripStatusLabel();
+            lblSizeXS = new ToolStripStatusLabel();
             tabSaroo = new TabPage();
             sRoot = new TableLayoutPanel();
             sRow = new FlowLayoutPanel();
@@ -125,10 +187,29 @@ namespace SDBuilderWin
             btnSarooOpenLists = new Button();
             btnSarooStart = new Button();
             sFill = new Panel();
+            lvSrList = new ListView();
+            colPathSR = new ColumnHeader();
+            colStatusSR = new ColumnHeader();
+            sTop = new FlowLayoutPanel();
+            lblSrMode = new Label();
+            rbSrFiles = new RadioButton();
+            rbSrDirs = new RadioButton();
+            btnSrChoose = new Button();
+            btnSrCheckAll = new Button();
+            btnSrUncheckAll = new Button();
+            btnSrStart = new Button();
+            statusStripSR = new StatusStrip();
+            lblStatusSR = new ToolStripStatusLabel();
+            lblSepSR1 = new ToolStripStatusLabel();
+            lblSpacerSR = new ToolStripStatusLabel();
+            lblCountSR = new ToolStripStatusLabel();
+            lblSepSR2 = new ToolStripStatusLabel();
+            lblSizeSR = new ToolStripStatusLabel();
             tabGamecube = new TabPage();
             gRoot = new TableLayoutPanel();
             gRow = new FlowLayoutPanel();
             btnGamecubeFw = new Button();
+            btnGamecubeCheats = new Button();
             lblList3 = new Label();
             cmbGamecubeList = new ComboBox();
             gListBtns = new FlowLayoutPanel();
@@ -136,10 +217,31 @@ namespace SDBuilderWin
             btnGamecubeOpenLists = new Button();
             btnGamecubeStart = new Button();
             gFill = new Panel();
+            lvGcList = new ListView();
+            colPathGC = new ColumnHeader();
+            colStatusGC = new ColumnHeader();
+            gcTop = new FlowLayoutPanel();
+            lblGcMode = new Label();
+            rbGcFiles = new RadioButton();
+            rbGcDirs = new RadioButton();
+            btnGcChoose = new Button();
+            btnGcCheckAll = new Button();
+            btnGcUncheckAll = new Button();
+            btnGcStart = new Button();
+            statusStripGC = new StatusStrip();
+            lblStatusGC = new ToolStripStatusLabel();
+            lblSepGC1 = new ToolStripStatusLabel();
+            lblSpacerGC = new ToolStripStatusLabel();
+            lblCountGC = new ToolStripStatusLabel();
+            lblSepGC2 = new ToolStripStatusLabel();
+            lblSizeGC = new ToolStripStatusLabel();
             tabSC64 = new TabPage();
             scRoot = new TableLayoutPanel();
             scRow = new FlowLayoutPanel();
             btnSC64Fw = new Button();
+            flowLayoutPanel1 = new FlowLayoutPanel();
+            btnSC64Install64DD = new Button();
+            btnSC64InstallEmulators = new Button();
             lblList4 = new Label();
             cmbSC64List = new ComboBox();
             scListBtns = new FlowLayoutPanel();
@@ -147,11 +249,11 @@ namespace SDBuilderWin
             btnSC64OpenLists = new Button();
             btnSC64Start = new Button();
             scExtras = new FlowLayoutPanel();
-            btnSC64Install64DD = new Button();
-            btnSC64InstallEmulators = new Button();
             scFill = new Panel();
             tabListmaker = new TabPage();
             lvList = new ListView();
+            colPathLM = new ColumnHeader();
+            colStatusLM = new ColumnHeader();
             lmTop2 = new FlowLayoutPanel();
             lblMode = new Label();
             rbFiles = new RadioButton();
@@ -162,6 +264,8 @@ namespace SDBuilderWin
             txtFilter = new TextBox();
             chkRecursive = new CheckBox();
             btnRefreshLM = new Button();
+            btnClearLM = new Button();
+            btnOpenGameListsLM = new Button();
             lmBottom = new FlowLayoutPanel();
             btnCheckAll = new Button();
             btnUncheckAll = new Button();
@@ -183,6 +287,7 @@ namespace SDBuilderWin
             setPanel = new FlowLayoutPanel();
             lblDriveList = new Label();
             chkOnlyRemovable = new CheckBox();
+            chkEjectPrompt = new CheckBox();
             lblCopyTO = new Label();
             numCopy = new NumericUpDown();
             lblOWTO = new Label();
@@ -199,19 +304,28 @@ namespace SDBuilderWin
             xRoot.SuspendLayout();
             xRow.SuspendLayout();
             xListBtns.SuspendLayout();
+            xFill.SuspendLayout();
+            xsTop.SuspendLayout();
+            statusStripXS.SuspendLayout();
             tabSaroo.SuspendLayout();
             sRoot.SuspendLayout();
             sRow.SuspendLayout();
             sListBtns.SuspendLayout();
+            sFill.SuspendLayout();
+            sTop.SuspendLayout();
+            statusStripSR.SuspendLayout();
             tabGamecube.SuspendLayout();
             gRoot.SuspendLayout();
             gRow.SuspendLayout();
             gListBtns.SuspendLayout();
+            gFill.SuspendLayout();
+            gcTop.SuspendLayout();
+            statusStripGC.SuspendLayout();
             tabSC64.SuspendLayout();
             scRoot.SuspendLayout();
             scRow.SuspendLayout();
+            flowLayoutPanel1.SuspendLayout();
             scListBtns.SuspendLayout();
-            scFill.SuspendLayout();
             tabListmaker.SuspendLayout();
             lmTop2.SuspendLayout();
             lmTop1.SuspendLayout();
@@ -230,17 +344,13 @@ namespace SDBuilderWin
             topPanel.Controls.Add(lblVersion);
             topPanel.Dock = DockStyle.Top;
             topPanel.Location = new Point(0, 0);
-topPanel.AutoSize = false;
-            topPanel.Height = 56;
-
             topPanel.Name = "topPanel";
             topPanel.Padding = new Padding(10, 8, 10, 8);
-            topPanel.Size = new Size(1000, 60);
+            topPanel.Size = new Size(1169, 60);
             topPanel.TabIndex = 2;
             // 
             // driveRow
             // 
-
             driveRow.Controls.Add(lblDrive);
             driveRow.Controls.Add(cmbDrives);
             driveRow.Controls.Add(btnRefresh);
@@ -248,15 +358,11 @@ topPanel.AutoSize = false;
             driveRow.Controls.Add(btnOpen);
             driveRow.Controls.Add(btnEject);
             driveRow.Dock = DockStyle.Top;
-
-            driveRow.AutoSize = false;
-            driveRow.Height = 36;
-            driveRow.MinimumSize = new Size(0, 36);
-
-driveRow.Location = new Point(10, 8);
+            driveRow.Location = new Point(10, 8);
             driveRow.Margin = new Padding(0);
+            driveRow.MinimumSize = new Size(1000, 36);
             driveRow.Name = "driveRow";
-            driveRow.Size = new Size(980, 29);
+            driveRow.Size = new Size(1149, 36);
             driveRow.TabIndex = 0;
             driveRow.WrapContents = false;
             // 
@@ -272,6 +378,7 @@ driveRow.Location = new Point(10, 8);
             // 
             // cmbDrives
             // 
+            cmbDrives.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             cmbDrives.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbDrives.Location = new Point(110, 3);
             cmbDrives.Name = "cmbDrives";
@@ -280,46 +387,42 @@ driveRow.Location = new Point(10, 8);
             // 
             // btnRefresh
             // 
+            btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnRefresh.Location = new Point(381, 0);
             btnRefresh.Margin = new Padding(8, 0, 0, 0);
             btnRefresh.Name = "btnRefresh";
-            btnRefresh.AutoSize = false;
-
-btnRefresh.Size = new Size(80, 28);
+            btnRefresh.Size = new Size(80, 28);
             btnRefresh.TabIndex = 2;
             btnRefresh.Text = "Refresh";
             // 
             // btnStop
             // 
+            btnStop.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnStop.Enabled = false;
             btnStop.Location = new Point(473, 0);
             btnStop.Margin = new Padding(12, 0, 0, 0);
             btnStop.Name = "btnStop";
-            btnStop.AutoSize = false;
-
-btnStop.Size = new Size(80, 28);
+            btnStop.Size = new Size(80, 28);
             btnStop.TabIndex = 3;
             btnStop.Text = "Stop";
             // 
             // btnOpen
             // 
+            btnOpen.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnOpen.Location = new Point(561, 0);
             btnOpen.Margin = new Padding(8, 0, 0, 0);
             btnOpen.Name = "btnOpen";
-            btnOpen.AutoSize = false;
-
-btnOpen.Size = new Size(130, 28);
+            btnOpen.Size = new Size(130, 28);
             btnOpen.TabIndex = 4;
             btnOpen.Text = "Open in Explorer";
             // 
             // btnEject
             // 
+            btnEject.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnEject.Location = new Point(699, 0);
             btnEject.Margin = new Padding(8, 0, 0, 0);
             btnEject.Name = "btnEject";
-            btnEject.AutoSize = false;
-
-btnEject.Size = new Size(110, 28);
+            btnEject.Size = new Size(110, 28);
             btnEject.TabIndex = 5;
             btnEject.Text = "Eject safely";
             // 
@@ -344,7 +447,7 @@ btnEject.Size = new Size(110, 28);
             tabs.Location = new Point(0, 60);
             tabs.Name = "tabs";
             tabs.SelectedIndex = 0;
-            tabs.Size = new Size(1000, 380);
+            tabs.Size = new Size(1169, 380);
             tabs.TabIndex = 0;
             // 
             // tabXstation
@@ -352,7 +455,7 @@ btnEject.Size = new Size(110, 28);
             tabXstation.Controls.Add(xRoot);
             tabXstation.Location = new Point(4, 24);
             tabXstation.Name = "tabXstation";
-            tabXstation.Size = new Size(992, 352);
+            tabXstation.Size = new Size(1161, 352);
             tabXstation.TabIndex = 0;
             tabXstation.Text = "Xstation";
             // 
@@ -368,7 +471,7 @@ btnEject.Size = new Size(110, 28);
             xRoot.RowCount = 2;
             xRoot.RowStyles.Add(new RowStyle());
             xRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            xRoot.Size = new Size(992, 352);
+            xRoot.Size = new Size(1161, 352);
             xRoot.TabIndex = 0;
             // 
             // xRow
@@ -383,7 +486,7 @@ btnEject.Size = new Size(110, 28);
             xRow.Location = new Point(3, 3);
             xRow.Name = "xRow";
             xRow.Padding = new Padding(8);
-            xRow.Size = new Size(986, 119);
+            xRow.Size = new Size(1155, 96);
             xRow.TabIndex = 0;
             xRow.WrapContents = false;
             // 
@@ -422,7 +525,7 @@ btnEject.Size = new Size(110, 28);
             xListBtns.Location = new Point(674, 8);
             xListBtns.Margin = new Padding(8, 0, 0, 0);
             xListBtns.Name = "xListBtns";
-
+            xListBtns.Size = new Size(186, 80);
             xListBtns.TabIndex = 3;
             // 
             // btnXstationRefreshLists
@@ -435,7 +538,7 @@ btnEject.Size = new Size(110, 28);
             // 
             // btnXstationOpenLists
             // 
-            btnXstationOpenLists.Location = new Point(3, 66);
+            btnXstationOpenLists.Location = new Point(3, 43);
             btnXstationOpenLists.Name = "btnXstationOpenLists";
             btnXstationOpenLists.Size = new Size(180, 34);
             btnXstationOpenLists.TabIndex = 2;
@@ -452,18 +555,181 @@ btnEject.Size = new Size(110, 28);
             // 
             // xFill
             // 
+            xFill.AutoScroll = true;
+            xFill.Controls.Add(lvXsList);
+            xFill.Controls.Add(xsTop);
+            xFill.Controls.Add(statusStripXS);
             xFill.Dock = DockStyle.Fill;
-            xFill.Location = new Point(3, 128);
+            xFill.Location = new Point(3, 105);
             xFill.Name = "xFill";
-            xFill.Size = new Size(986, 221);
+            xFill.Size = new Size(1155, 244);
             xFill.TabIndex = 1;
+            // 
+            // lvXsList
+            // 
+            lvXsList.CheckBoxes = true;
+            lvXsList.Columns.AddRange(new ColumnHeader[] { colPathXS, colStatusXS });
+            lvXsList.Dock = DockStyle.Fill;
+            lvXsList.FullRowSelect = true;
+            lvXsList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lvXsList.Location = new Point(0, 41);
+            lvXsList.Name = "lvXsList";
+            lvXsList.Size = new Size(1155, 181);
+            lvXsList.TabIndex = 0;
+            lvXsList.UseCompatibleStateImageBehavior = false;
+            lvXsList.View = View.Details;
+            // 
+            // colPathXS
+            // 
+            colPathXS.Text = "Path";
+            colPathXS.Width = 500;
+            // 
+            // colStatusXS
+            // 
+            colStatusXS.Text = "Status";
+            colStatusXS.Width = 160;
+            // 
+            // xsTop
+            // 
+            xsTop.AutoSize = true;
+            xsTop.Controls.Add(lblXsMode);
+            xsTop.Controls.Add(rbXsFiles);
+            xsTop.Controls.Add(rbXsDirs);
+            xsTop.Controls.Add(btnXsChoose);
+            xsTop.Controls.Add(btnXsCheckAll);
+            xsTop.Controls.Add(btnXsUncheckAll);
+            xsTop.Controls.Add(btnXsStart);
+            xsTop.Dock = DockStyle.Top;
+            xsTop.Location = new Point(0, 0);
+            xsTop.Margin = new Padding(10);
+            xsTop.Name = "xsTop";
+            xsTop.Size = new Size(1155, 41);
+            xsTop.TabIndex = 1;
+            xsTop.WrapContents = false;
+            // 
+            // lblXsMode
+            // 
+            lblXsMode.AutoSize = true;
+            lblXsMode.Location = new Point(6, 13);
+            lblXsMode.Margin = new Padding(6, 13, 8, 0);
+            lblXsMode.Name = "lblXsMode";
+            lblXsMode.Size = new Size(41, 15);
+            lblXsMode.TabIndex = 0;
+            lblXsMode.Text = "Mode:";
+            // 
+            // rbXsFiles
+            // 
+            rbXsFiles.AutoSize = true;
+            rbXsFiles.Checked = true;
+            rbXsFiles.Location = new Point(55, 11);
+            rbXsFiles.Margin = new Padding(0, 11, 8, 0);
+            rbXsFiles.Name = "rbXsFiles";
+            rbXsFiles.Size = new Size(48, 19);
+            rbXsFiles.TabIndex = 1;
+            rbXsFiles.TabStop = true;
+            rbXsFiles.Text = "Files";
+            // 
+            // rbXsDirs
+            // 
+            rbXsDirs.AutoSize = true;
+            rbXsDirs.Location = new Point(111, 11);
+            rbXsDirs.Margin = new Padding(0, 11, 12, 0);
+            rbXsDirs.Name = "rbXsDirs";
+            rbXsDirs.Size = new Size(81, 19);
+            rbXsDirs.TabIndex = 2;
+            rbXsDirs.Text = "Directories";
+            // 
+            // btnXsChoose
+            // 
+            btnXsChoose.AutoSize = true;
+            btnXsChoose.Location = new Point(204, 8);
+            btnXsChoose.Margin = new Padding(0, 8, 8, 8);
+            btnXsChoose.Name = "btnXsChoose";
+            btnXsChoose.Size = new Size(75, 25);
+            btnXsChoose.TabIndex = 3;
+            btnXsChoose.Text = "Choose…";
+            // 
+            // btnXsCheckAll
+            // 
+            btnXsCheckAll.AutoSize = true;
+            btnXsCheckAll.Location = new Point(287, 8);
+            btnXsCheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnXsCheckAll.Name = "btnXsCheckAll";
+            btnXsCheckAll.Size = new Size(75, 25);
+            btnXsCheckAll.TabIndex = 4;
+            btnXsCheckAll.Text = "Check all";
+            // 
+            // btnXsUncheckAll
+            // 
+            btnXsUncheckAll.AutoSize = true;
+            btnXsUncheckAll.Location = new Point(370, 8);
+            btnXsUncheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnXsUncheckAll.Name = "btnXsUncheckAll";
+            btnXsUncheckAll.Size = new Size(78, 25);
+            btnXsUncheckAll.TabIndex = 5;
+            btnXsUncheckAll.Text = "Uncheck all";
+            // 
+            // btnXsStart
+            // 
+            btnXsStart.AutoSize = true;
+            btnXsStart.Location = new Point(456, 8);
+            btnXsStart.Margin = new Padding(0, 8, 8, 8);
+            btnXsStart.Name = "btnXsStart";
+            btnXsStart.Size = new Size(96, 25);
+            btnXsStart.TabIndex = 6;
+            btnXsStart.Text = "Start (checked)";
+            // 
+            // statusStripXS
+            // 
+            statusStripXS.Items.AddRange(new ToolStripItem[] { lblStatusXS, lblSepXS1, lblSpacerXS, lblCountXS, lblSepXS2, lblSizeXS });
+            statusStripXS.Location = new Point(0, 222);
+            statusStripXS.Name = "statusStripXS";
+            statusStripXS.Size = new Size(1155, 22);
+            statusStripXS.SizingGrip = false;
+            statusStripXS.TabIndex = 2;
+            // 
+            // lblStatusXS
+            // 
+            lblStatusXS.Name = "lblStatusXS";
+            lblStatusXS.Size = new Size(42, 17);
+            lblStatusXS.Text = "Ready.";
+            // 
+            // lblSepXS1
+            // 
+            lblSepXS1.Name = "lblSepXS1";
+            lblSepXS1.Size = new Size(16, 17);
+            lblSepXS1.Text = " | ";
+            // 
+            // lblSpacerXS
+            // 
+            lblSpacerXS.Name = "lblSpacerXS";
+            lblSpacerXS.Size = new Size(952, 17);
+            lblSpacerXS.Spring = true;
+            // 
+            // lblCountXS
+            // 
+            lblCountXS.Name = "lblCountXS";
+            lblCountXS.Size = new Size(65, 17);
+            lblCountXS.Text = "Checked: 0";
+            // 
+            // lblSepXS2
+            // 
+            lblSepXS2.Name = "lblSepXS2";
+            lblSepXS2.Size = new Size(16, 17);
+            lblSepXS2.Text = " | ";
+            // 
+            // lblSizeXS
+            // 
+            lblSizeXS.Name = "lblSizeXS";
+            lblSizeXS.Size = new Size(49, 17);
+            lblSizeXS.Text = "Size: 0 B";
             // 
             // tabSaroo
             // 
             tabSaroo.Controls.Add(sRoot);
             tabSaroo.Location = new Point(4, 24);
             tabSaroo.Name = "tabSaroo";
-            tabSaroo.Size = new Size(992, 352);
+            tabSaroo.Size = new Size(1161, 352);
             tabSaroo.TabIndex = 1;
             tabSaroo.Text = "Saroo";
             // 
@@ -479,7 +745,7 @@ btnEject.Size = new Size(110, 28);
             sRoot.RowCount = 2;
             sRoot.RowStyles.Add(new RowStyle());
             sRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            sRoot.Size = new Size(992, 352);
+            sRoot.Size = new Size(1161, 352);
             sRoot.TabIndex = 0;
             // 
             // sRow
@@ -494,7 +760,7 @@ btnEject.Size = new Size(110, 28);
             sRow.Location = new Point(3, 3);
             sRow.Name = "sRow";
             sRow.Padding = new Padding(8);
-            sRow.Size = new Size(986, 119);
+            sRow.Size = new Size(1155, 96);
             sRow.TabIndex = 0;
             sRow.WrapContents = false;
             // 
@@ -533,7 +799,7 @@ btnEject.Size = new Size(110, 28);
             sListBtns.Location = new Point(674, 8);
             sListBtns.Margin = new Padding(8, 0, 0, 0);
             sListBtns.Name = "sListBtns";
-
+            sListBtns.Size = new Size(186, 80);
             sListBtns.TabIndex = 3;
             // 
             // btnSarooRefreshLists
@@ -546,7 +812,7 @@ btnEject.Size = new Size(110, 28);
             // 
             // btnSarooOpenLists
             // 
-            btnSarooOpenLists.Location = new Point(3, 66);
+            btnSarooOpenLists.Location = new Point(3, 43);
             btnSarooOpenLists.Name = "btnSarooOpenLists";
             btnSarooOpenLists.Size = new Size(180, 34);
             btnSarooOpenLists.TabIndex = 2;
@@ -563,18 +829,181 @@ btnEject.Size = new Size(110, 28);
             // 
             // sFill
             // 
+            sFill.AutoScroll = true;
+            sFill.Controls.Add(lvSrList);
+            sFill.Controls.Add(sTop);
+            sFill.Controls.Add(statusStripSR);
             sFill.Dock = DockStyle.Fill;
-            sFill.Location = new Point(3, 128);
+            sFill.Location = new Point(3, 105);
             sFill.Name = "sFill";
-            sFill.Size = new Size(986, 221);
+            sFill.Size = new Size(1155, 244);
             sFill.TabIndex = 1;
+            // 
+            // lvSrList
+            // 
+            lvSrList.CheckBoxes = true;
+            lvSrList.Columns.AddRange(new ColumnHeader[] { colPathSR, colStatusSR });
+            lvSrList.Dock = DockStyle.Fill;
+            lvSrList.FullRowSelect = true;
+            lvSrList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lvSrList.Location = new Point(0, 41);
+            lvSrList.Name = "lvSrList";
+            lvSrList.Size = new Size(1155, 181);
+            lvSrList.TabIndex = 0;
+            lvSrList.UseCompatibleStateImageBehavior = false;
+            lvSrList.View = View.Details;
+            // 
+            // colPathSR
+            // 
+            colPathSR.Text = "Path";
+            colPathSR.Width = 500;
+            // 
+            // colStatusSR
+            // 
+            colStatusSR.Text = "Status";
+            colStatusSR.Width = 160;
+            // 
+            // sTop
+            // 
+            sTop.AutoSize = true;
+            sTop.Controls.Add(lblSrMode);
+            sTop.Controls.Add(rbSrFiles);
+            sTop.Controls.Add(rbSrDirs);
+            sTop.Controls.Add(btnSrChoose);
+            sTop.Controls.Add(btnSrCheckAll);
+            sTop.Controls.Add(btnSrUncheckAll);
+            sTop.Controls.Add(btnSrStart);
+            sTop.Dock = DockStyle.Top;
+            sTop.Location = new Point(0, 0);
+            sTop.Margin = new Padding(10);
+            sTop.Name = "sTop";
+            sTop.Size = new Size(1155, 41);
+            sTop.TabIndex = 1;
+            sTop.WrapContents = false;
+            // 
+            // lblSrMode
+            // 
+            lblSrMode.AutoSize = true;
+            lblSrMode.Location = new Point(6, 13);
+            lblSrMode.Margin = new Padding(6, 13, 8, 0);
+            lblSrMode.Name = "lblSrMode";
+            lblSrMode.Size = new Size(41, 15);
+            lblSrMode.TabIndex = 0;
+            lblSrMode.Text = "Mode:";
+            // 
+            // rbSrFiles
+            // 
+            rbSrFiles.AutoSize = true;
+            rbSrFiles.Checked = true;
+            rbSrFiles.Location = new Point(55, 11);
+            rbSrFiles.Margin = new Padding(0, 11, 8, 0);
+            rbSrFiles.Name = "rbSrFiles";
+            rbSrFiles.Size = new Size(48, 19);
+            rbSrFiles.TabIndex = 1;
+            rbSrFiles.TabStop = true;
+            rbSrFiles.Text = "Files";
+            // 
+            // rbSrDirs
+            // 
+            rbSrDirs.AutoSize = true;
+            rbSrDirs.Location = new Point(111, 11);
+            rbSrDirs.Margin = new Padding(0, 11, 12, 0);
+            rbSrDirs.Name = "rbSrDirs";
+            rbSrDirs.Size = new Size(81, 19);
+            rbSrDirs.TabIndex = 2;
+            rbSrDirs.Text = "Directories";
+            // 
+            // btnSrChoose
+            // 
+            btnSrChoose.AutoSize = true;
+            btnSrChoose.Location = new Point(204, 8);
+            btnSrChoose.Margin = new Padding(0, 8, 8, 8);
+            btnSrChoose.Name = "btnSrChoose";
+            btnSrChoose.Size = new Size(75, 25);
+            btnSrChoose.TabIndex = 3;
+            btnSrChoose.Text = "Choose…";
+            // 
+            // btnSrCheckAll
+            // 
+            btnSrCheckAll.AutoSize = true;
+            btnSrCheckAll.Location = new Point(287, 8);
+            btnSrCheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnSrCheckAll.Name = "btnSrCheckAll";
+            btnSrCheckAll.Size = new Size(75, 25);
+            btnSrCheckAll.TabIndex = 4;
+            btnSrCheckAll.Text = "Check all";
+            // 
+            // btnSrUncheckAll
+            // 
+            btnSrUncheckAll.AutoSize = true;
+            btnSrUncheckAll.Location = new Point(370, 8);
+            btnSrUncheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnSrUncheckAll.Name = "btnSrUncheckAll";
+            btnSrUncheckAll.Size = new Size(78, 25);
+            btnSrUncheckAll.TabIndex = 5;
+            btnSrUncheckAll.Text = "Uncheck all";
+            // 
+            // btnSrStart
+            // 
+            btnSrStart.AutoSize = true;
+            btnSrStart.Location = new Point(456, 8);
+            btnSrStart.Margin = new Padding(0, 8, 8, 8);
+            btnSrStart.Name = "btnSrStart";
+            btnSrStart.Size = new Size(96, 25);
+            btnSrStart.TabIndex = 6;
+            btnSrStart.Text = "Start (checked)";
+            // 
+            // statusStripSR
+            // 
+            statusStripSR.Items.AddRange(new ToolStripItem[] { lblStatusSR, lblSepSR1, lblSpacerSR, lblCountSR, lblSepSR2, lblSizeSR });
+            statusStripSR.Location = new Point(0, 222);
+            statusStripSR.Name = "statusStripSR";
+            statusStripSR.Size = new Size(1155, 22);
+            statusStripSR.SizingGrip = false;
+            statusStripSR.TabIndex = 2;
+            // 
+            // lblStatusSR
+            // 
+            lblStatusSR.Name = "lblStatusSR";
+            lblStatusSR.Size = new Size(42, 17);
+            lblStatusSR.Text = "Ready.";
+            // 
+            // lblSepSR1
+            // 
+            lblSepSR1.Name = "lblSepSR1";
+            lblSepSR1.Size = new Size(16, 17);
+            lblSepSR1.Text = " | ";
+            // 
+            // lblSpacerSR
+            // 
+            lblSpacerSR.Name = "lblSpacerSR";
+            lblSpacerSR.Size = new Size(952, 17);
+            lblSpacerSR.Spring = true;
+            // 
+            // lblCountSR
+            // 
+            lblCountSR.Name = "lblCountSR";
+            lblCountSR.Size = new Size(65, 17);
+            lblCountSR.Text = "Checked: 0";
+            // 
+            // lblSepSR2
+            // 
+            lblSepSR2.Name = "lblSepSR2";
+            lblSepSR2.Size = new Size(16, 17);
+            lblSepSR2.Text = " | ";
+            // 
+            // lblSizeSR
+            // 
+            lblSizeSR.Name = "lblSizeSR";
+            lblSizeSR.Size = new Size(49, 17);
+            lblSizeSR.Text = "Size: 0 B";
             // 
             // tabGamecube
             // 
             tabGamecube.Controls.Add(gRoot);
             tabGamecube.Location = new Point(4, 24);
             tabGamecube.Name = "tabGamecube";
-            tabGamecube.Size = new Size(992, 352);
+            tabGamecube.Size = new Size(1161, 352);
             tabGamecube.TabIndex = 2;
             tabGamecube.Text = "Gamecube";
             // 
@@ -590,13 +1019,14 @@ btnEject.Size = new Size(110, 28);
             gRoot.RowCount = 2;
             gRoot.RowStyles.Add(new RowStyle());
             gRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            gRoot.Size = new Size(992, 352);
+            gRoot.Size = new Size(1161, 352);
             gRoot.TabIndex = 0;
             // 
             // gRow
             // 
             gRow.AutoSize = true;
             gRow.Controls.Add(btnGamecubeFw);
+            gRow.Controls.Add(btnGamecubeCheats);
             gRow.Controls.Add(lblList3);
             gRow.Controls.Add(cmbGamecubeList);
             gRow.Controls.Add(gListBtns);
@@ -605,7 +1035,7 @@ btnEject.Size = new Size(110, 28);
             gRow.Location = new Point(3, 3);
             gRow.Name = "gRow";
             gRow.Padding = new Padding(8);
-            gRow.Size = new Size(986, 119);
+            gRow.Size = new Size(1155, 96);
             gRow.TabIndex = 0;
             gRow.WrapContents = false;
             // 
@@ -617,10 +1047,18 @@ btnEject.Size = new Size(110, 28);
             btnGamecubeFw.TabIndex = 0;
             btnGamecubeFw.Text = "Check/Download firmware";
             // 
+            // btnGamecubeCheats
+            // 
+            btnGamecubeCheats.Location = new Point(257, 11);
+            btnGamecubeCheats.Name = "btnGamecubeCheats";
+            btnGamecubeCheats.Size = new Size(160, 34);
+            btnGamecubeCheats.TabIndex = 1;
+            btnGamecubeCheats.Text = "Download Cheat Files";
+            // 
             // lblList3
             // 
             lblList3.AutoSize = true;
-            lblList3.Location = new Point(266, 16);
+            lblList3.Location = new Point(432, 16);
             lblList3.Margin = new Padding(12, 8, 6, 0);
             lblList3.Name = "lblList3";
             lblList3.Size = new Size(28, 15);
@@ -630,7 +1068,7 @@ btnEject.Size = new Size(110, 28);
             // cmbGamecubeList
             // 
             cmbGamecubeList.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbGamecubeList.Location = new Point(303, 11);
+            cmbGamecubeList.Location = new Point(469, 11);
             cmbGamecubeList.Name = "cmbGamecubeList";
             cmbGamecubeList.Size = new Size(360, 23);
             cmbGamecubeList.TabIndex = 2;
@@ -641,10 +1079,10 @@ btnEject.Size = new Size(110, 28);
             gListBtns.Controls.Add(btnGamecubeRefreshLists);
             gListBtns.Controls.Add(btnGamecubeOpenLists);
             gListBtns.FlowDirection = FlowDirection.TopDown;
-            gListBtns.Location = new Point(674, 8);
+            gListBtns.Location = new Point(840, 8);
             gListBtns.Margin = new Padding(8, 0, 0, 0);
             gListBtns.Name = "gListBtns";
-
+            gListBtns.Size = new Size(186, 80);
             gListBtns.TabIndex = 3;
             // 
             // btnGamecubeRefreshLists
@@ -657,7 +1095,7 @@ btnEject.Size = new Size(110, 28);
             // 
             // btnGamecubeOpenLists
             // 
-            btnGamecubeOpenLists.Location = new Point(3, 66);
+            btnGamecubeOpenLists.Location = new Point(3, 43);
             btnGamecubeOpenLists.Name = "btnGamecubeOpenLists";
             btnGamecubeOpenLists.Size = new Size(180, 34);
             btnGamecubeOpenLists.TabIndex = 2;
@@ -666,7 +1104,7 @@ btnEject.Size = new Size(110, 28);
             // btnGamecubeStart
             // 
             btnGamecubeStart.Enabled = false;
-            btnGamecubeStart.Location = new Point(863, 11);
+            btnGamecubeStart.Location = new Point(1029, 11);
             btnGamecubeStart.Name = "btnGamecubeStart";
             btnGamecubeStart.Size = new Size(100, 34);
             btnGamecubeStart.TabIndex = 4;
@@ -674,18 +1112,186 @@ btnEject.Size = new Size(110, 28);
             // 
             // gFill
             // 
+            gFill.AutoScroll = true;
+            gFill.Controls.Add(lvGcList);
+            gFill.Controls.Add(gcTop);
+            gFill.Controls.Add(statusStripGC);
             gFill.Dock = DockStyle.Fill;
-            gFill.Location = new Point(3, 128);
+            gFill.Location = new Point(3, 105);
             gFill.Name = "gFill";
-            gFill.Size = new Size(986, 221);
+            gFill.Size = new Size(1155, 244);
             gFill.TabIndex = 1;
+            // 
+            // lvGcList
+            // 
+            lvGcList.CheckBoxes = true;
+            lvGcList.Columns.AddRange(new ColumnHeader[] { colPathGC, colStatusGC });
+            lvGcList.Dock = DockStyle.Fill;
+            lvGcList.FullRowSelect = true;
+            lvGcList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lvGcList.Location = new Point(0, 41);
+            lvGcList.Name = "lvGcList";
+            lvGcList.Size = new Size(1155, 181);
+            lvGcList.TabIndex = 0;
+            lvGcList.UseCompatibleStateImageBehavior = false;
+            lvGcList.View = View.Details;
+            // 
+            // colPathGC
+            // 
+            colPathGC.Text = "Path";
+            colPathGC.Width = 1200;
+            // 
+            // colStatusGC
+            // 
+            colStatusGC.Text = "Status";
+            colStatusGC.Width = 160;
+            // 
+            // gcTop
+            // 
+            gcTop.AutoSize = true;
+            gcTop.Controls.Add(lblGcMode);
+            gcTop.Controls.Add(rbGcFiles);
+            gcTop.Controls.Add(rbGcDirs);
+            gcTop.Controls.Add(btnGcChoose);
+            gcTop.Controls.Add(btnGcCheckAll);
+            gcTop.Controls.Add(btnGcUncheckAll);
+            gcTop.Controls.Add(btnGcStart);
+            gcTop.Dock = DockStyle.Top;
+            gcTop.Location = new Point(0, 0);
+            gcTop.Margin = new Padding(10);
+            gcTop.Name = "gcTop";
+            gcTop.Size = new Size(1155, 41);
+            gcTop.TabIndex = 1;
+            gcTop.WrapContents = false;
+            // 
+            // lblGcMode
+            // 
+            lblGcMode.AutoSize = true;
+            lblGcMode.Location = new Point(6, 13);
+            lblGcMode.Margin = new Padding(6, 13, 8, 0);
+            lblGcMode.Name = "lblGcMode";
+            lblGcMode.Size = new Size(41, 15);
+            lblGcMode.TabIndex = 0;
+            lblGcMode.Text = "Mode:";
+            // 
+            // rbGcFiles
+            // 
+            rbGcFiles.AutoSize = true;
+            rbGcFiles.Checked = true;
+            rbGcFiles.Location = new Point(55, 11);
+            rbGcFiles.Margin = new Padding(0, 11, 8, 0);
+            rbGcFiles.Name = "rbGcFiles";
+            rbGcFiles.Size = new Size(48, 19);
+            rbGcFiles.TabIndex = 1;
+            rbGcFiles.TabStop = true;
+            rbGcFiles.Text = "Files";
+            rbGcFiles.UseVisualStyleBackColor = true;
+            // 
+            // rbGcDirs
+            // 
+            rbGcDirs.AutoSize = true;
+            rbGcDirs.Location = new Point(111, 11);
+            rbGcDirs.Margin = new Padding(0, 11, 12, 0);
+            rbGcDirs.Name = "rbGcDirs";
+            rbGcDirs.Size = new Size(81, 19);
+            rbGcDirs.TabIndex = 2;
+            rbGcDirs.Text = "Directories";
+            rbGcDirs.UseVisualStyleBackColor = true;
+            // 
+            // btnGcChoose
+            // 
+            btnGcChoose.AutoSize = true;
+            btnGcChoose.Location = new Point(204, 8);
+            btnGcChoose.Margin = new Padding(0, 8, 8, 8);
+            btnGcChoose.Name = "btnGcChoose";
+            btnGcChoose.Size = new Size(75, 25);
+            btnGcChoose.TabIndex = 3;
+            btnGcChoose.Text = "Choose…";
+            btnGcChoose.UseVisualStyleBackColor = true;
+            // 
+            // btnGcCheckAll
+            // 
+            btnGcCheckAll.Location = new Point(287, 8);
+            btnGcCheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnGcCheckAll.Name = "btnGcCheckAll";
+            btnGcCheckAll.Size = new Size(75, 25);
+            btnGcCheckAll.TabIndex = 4;
+            btnGcCheckAll.Text = "Check all";
+            btnGcCheckAll.UseVisualStyleBackColor = true;
+            btnGcCheckAll.Click += btnGcCheckAll_Click;
+            // 
+            // btnGcUncheckAll
+            // 
+            btnGcUncheckAll.Location = new Point(370, 8);
+            btnGcUncheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnGcUncheckAll.Name = "btnGcUncheckAll";
+            btnGcUncheckAll.Size = new Size(78, 25);
+            btnGcUncheckAll.TabIndex = 5;
+            btnGcUncheckAll.Text = "Uncheck all";
+            btnGcUncheckAll.UseVisualStyleBackColor = true;
+            // 
+            // btnGcStart
+            // 
+            btnGcStart.Location = new Point(456, 8);
+            btnGcStart.Margin = new Padding(0, 8, 8, 8);
+            btnGcStart.Name = "btnGcStart";
+            btnGcStart.Size = new Size(96, 25);
+            btnGcStart.TabIndex = 6;
+            btnGcStart.Text = "Start (checked)";
+            btnGcStart.UseVisualStyleBackColor = true;
+            // 
+            // statusStripGC
+            // 
+            statusStripGC.Items.AddRange(new ToolStripItem[] { lblStatusGC, lblSepGC1, lblSpacerGC, lblCountGC, lblSepGC2, lblSizeGC });
+            statusStripGC.Location = new Point(0, 222);
+            statusStripGC.Name = "statusStripGC";
+            statusStripGC.Size = new Size(1155, 22);
+            statusStripGC.TabIndex = 2;
+            statusStripGC.Text = "statusStripGC";
+            // 
+            // lblStatusGC
+            // 
+            lblStatusGC.Name = "lblStatusGC";
+            lblStatusGC.Size = new Size(42, 17);
+            lblStatusGC.Text = "Ready.";
+            // 
+            // lblSepGC1
+            // 
+            lblSepGC1.Name = "lblSepGC1";
+            lblSepGC1.Size = new Size(10, 17);
+            lblSepGC1.Text = "|";
+            // 
+            // lblSpacerGC
+            // 
+            lblSpacerGC.Name = "lblSpacerGC";
+            lblSpacerGC.Size = new Size(964, 17);
+            lblSpacerGC.Spring = true;
+            lblSpacerGC.Text = " ";
+            // 
+            // lblCountGC
+            // 
+            lblCountGC.Name = "lblCountGC";
+            lblCountGC.Size = new Size(65, 17);
+            lblCountGC.Text = "Checked: 0";
+            // 
+            // lblSepGC2
+            // 
+            lblSepGC2.Name = "lblSepGC2";
+            lblSepGC2.Size = new Size(10, 17);
+            lblSepGC2.Text = "|";
+            // 
+            // lblSizeGC
+            // 
+            lblSizeGC.Name = "lblSizeGC";
+            lblSizeGC.Size = new Size(49, 17);
+            lblSizeGC.Text = "Size: 0 B";
             // 
             // tabSC64
             // 
             tabSC64.Controls.Add(scRoot);
             tabSC64.Location = new Point(4, 24);
             tabSC64.Name = "tabSC64";
-            tabSC64.Size = new Size(992, 352);
+            tabSC64.Size = new Size(1161, 352);
             tabSC64.TabIndex = 3;
             tabSC64.Text = "Summercart64";
             // 
@@ -701,13 +1307,14 @@ btnEject.Size = new Size(110, 28);
             scRoot.RowCount = 2;
             scRoot.RowStyles.Add(new RowStyle());
             scRoot.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            scRoot.Size = new Size(992, 352);
+            scRoot.Size = new Size(1161, 352);
             scRoot.TabIndex = 0;
             // 
             // scRow
             // 
             scRow.AutoSize = true;
             scRow.Controls.Add(btnSC64Fw);
+            scRow.Controls.Add(flowLayoutPanel1);
             scRow.Controls.Add(lblList4);
             scRow.Controls.Add(cmbSC64List);
             scRow.Controls.Add(scListBtns);
@@ -717,7 +1324,7 @@ btnEject.Size = new Size(110, 28);
             scRow.Location = new Point(3, 3);
             scRow.Name = "scRow";
             scRow.Padding = new Padding(8);
-            scRow.Size = new Size(986, 119);
+            scRow.Size = new Size(1155, 96);
             scRow.TabIndex = 0;
             scRow.WrapContents = false;
             // 
@@ -729,10 +1336,38 @@ btnEject.Size = new Size(110, 28);
             btnSC64Fw.TabIndex = 0;
             btnSC64Fw.Text = "Check/Download firmware";
             // 
+            // flowLayoutPanel1
+            // 
+            flowLayoutPanel1.AutoSize = true;
+            flowLayoutPanel1.Controls.Add(btnSC64Install64DD);
+            flowLayoutPanel1.Controls.Add(btnSC64InstallEmulators);
+            flowLayoutPanel1.FlowDirection = FlowDirection.TopDown;
+            flowLayoutPanel1.Location = new Point(262, 8);
+            flowLayoutPanel1.Margin = new Padding(8, 0, 0, 0);
+            flowLayoutPanel1.Name = "flowLayoutPanel1";
+            flowLayoutPanel1.Size = new Size(166, 80);
+            flowLayoutPanel1.TabIndex = 4;
+            // 
+            // btnSC64Install64DD
+            // 
+            btnSC64Install64DD.Location = new Point(3, 3);
+            btnSC64Install64DD.Name = "btnSC64Install64DD";
+            btnSC64Install64DD.Size = new Size(160, 34);
+            btnSC64Install64DD.TabIndex = 0;
+            btnSC64Install64DD.Text = "Install 64DD IPL";
+            // 
+            // btnSC64InstallEmulators
+            // 
+            btnSC64InstallEmulators.Location = new Point(3, 43);
+            btnSC64InstallEmulators.Name = "btnSC64InstallEmulators";
+            btnSC64InstallEmulators.Size = new Size(160, 34);
+            btnSC64InstallEmulators.TabIndex = 1;
+            btnSC64InstallEmulators.Text = "Install Emulators";
+            // 
             // lblList4
             // 
             lblList4.AutoSize = true;
-            lblList4.Location = new Point(266, 16);
+            lblList4.Location = new Point(440, 16);
             lblList4.Margin = new Padding(12, 8, 6, 0);
             lblList4.Name = "lblList4";
             lblList4.Size = new Size(28, 15);
@@ -742,7 +1377,7 @@ btnEject.Size = new Size(110, 28);
             // cmbSC64List
             // 
             cmbSC64List.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSC64List.Location = new Point(303, 11);
+            cmbSC64List.Location = new Point(477, 11);
             cmbSC64List.Name = "cmbSC64List";
             cmbSC64List.Size = new Size(360, 23);
             cmbSC64List.TabIndex = 2;
@@ -753,23 +1388,23 @@ btnEject.Size = new Size(110, 28);
             scListBtns.Controls.Add(btnSC64RefreshLists);
             scListBtns.Controls.Add(btnSC64OpenLists);
             scListBtns.FlowDirection = FlowDirection.TopDown;
-            scListBtns.Location = new Point(674, 8);
+            scListBtns.Location = new Point(848, 8);
             scListBtns.Margin = new Padding(8, 0, 0, 0);
             scListBtns.Name = "scListBtns";
-
+            scListBtns.Size = new Size(186, 80);
             scListBtns.TabIndex = 3;
             // 
             // btnSC64RefreshLists
             // 
             btnSC64RefreshLists.Location = new Point(3, 3);
             btnSC64RefreshLists.Name = "btnSC64RefreshLists";
-            btnSC64RefreshLists.Size = new Size(120, 34);
+            btnSC64RefreshLists.Size = new Size(114, 34);
             btnSC64RefreshLists.TabIndex = 0;
             btnSC64RefreshLists.Text = "Refresh lists";
             // 
             // btnSC64OpenLists
             // 
-            btnSC64OpenLists.Location = new Point(3, 66);
+            btnSC64OpenLists.Location = new Point(3, 43);
             btnSC64OpenLists.Name = "btnSC64OpenLists";
             btnSC64OpenLists.Size = new Size(180, 34);
             btnSC64OpenLists.TabIndex = 2;
@@ -778,7 +1413,7 @@ btnEject.Size = new Size(110, 28);
             // btnSC64Start
             // 
             btnSC64Start.Enabled = false;
-            btnSC64Start.Location = new Point(863, 11);
+            btnSC64Start.Location = new Point(1037, 11);
             btnSC64Start.Name = "btnSC64Start";
             btnSC64Start.Size = new Size(100, 34);
             btnSC64Start.TabIndex = 4;
@@ -788,37 +1423,20 @@ btnEject.Size = new Size(110, 28);
             // 
             scExtras.AutoSize = true;
             scExtras.FlowDirection = FlowDirection.TopDown;
-            scExtras.Location = new Point(974, 8);
+            scExtras.Location = new Point(1148, 8);
             scExtras.Margin = new Padding(8, 0, 0, 0);
             scExtras.Name = "scExtras";
-
+            scExtras.Size = new Size(0, 0);
             scExtras.TabIndex = 5;
             scExtras.WrapContents = false;
             // 
-            // btnSC64Install64DD
-            // 
-            btnSC64Install64DD.Location = new Point(24, 44);
-            btnSC64Install64DD.Name = "btnSC64Install64DD";
-            btnSC64Install64DD.Size = new Size(160, 34);
-            btnSC64Install64DD.TabIndex = 0;
-            btnSC64Install64DD.Text = "Install 64DD IPL";
-            // 
-            // btnSC64InstallEmulators
-            // 
-            btnSC64InstallEmulators.Location = new Point(24, 93);
-            btnSC64InstallEmulators.Name = "btnSC64InstallEmulators";
-            btnSC64InstallEmulators.Size = new Size(160, 34);
-            btnSC64InstallEmulators.TabIndex = 1;
-            btnSC64InstallEmulators.Text = "Install Emulators";
-            // 
             // scFill
             // 
-            scFill.Controls.Add(btnSC64InstallEmulators);
-            scFill.Controls.Add(btnSC64Install64DD);
+            scFill.AutoScroll = true;
             scFill.Dock = DockStyle.Fill;
-            scFill.Location = new Point(3, 128);
+            scFill.Location = new Point(3, 105);
             scFill.Name = "scFill";
-            scFill.Size = new Size(986, 221);
+            scFill.Size = new Size(1155, 244);
             scFill.TabIndex = 1;
             // 
             // tabListmaker
@@ -830,21 +1448,32 @@ btnEject.Size = new Size(110, 28);
             tabListmaker.Controls.Add(statusStripLM);
             tabListmaker.Location = new Point(4, 24);
             tabListmaker.Name = "tabListmaker";
-            tabListmaker.Size = new Size(992, 352);
+            tabListmaker.Size = new Size(1161, 352);
             tabListmaker.TabIndex = 4;
             tabListmaker.Text = "Listmaker";
             // 
             // lvList
             // 
             lvList.CheckBoxes = true;
+            lvList.Columns.AddRange(new ColumnHeader[] { colPathLM, colStatusLM });
             lvList.Dock = DockStyle.Fill;
             lvList.FullRowSelect = true;
-            lvList.Location = new Point(0, 92);
+            lvList.Location = new Point(0, 93);
             lvList.Name = "lvList";
-            lvList.Size = new Size(992, 191);
+            lvList.Size = new Size(1161, 190);
             lvList.TabIndex = 0;
             lvList.UseCompatibleStateImageBehavior = false;
             lvList.View = View.Details;
+            // 
+            // colPathLM
+            // 
+            colPathLM.Text = "Path";
+            colPathLM.Width = 500;
+            // 
+            // colStatusLM
+            // 
+            colStatusLM.Text = "Status";
+            colStatusLM.Width = 160;
             // 
             // lmTop2
             // 
@@ -853,10 +1482,10 @@ btnEject.Size = new Size(110, 28);
             lmTop2.Controls.Add(rbFiles);
             lmTop2.Controls.Add(rbDirs);
             lmTop2.Dock = DockStyle.Top;
-            lmTop2.Location = new Point(0, 46);
+            lmTop2.Location = new Point(0, 47);
             lmTop2.Name = "lmTop2";
             lmTop2.Padding = new Padding(8);
-            lmTop2.Size = new Size(992, 46);
+            lmTop2.Size = new Size(1161, 46);
             lmTop2.TabIndex = 1;
             // 
             // lblMode
@@ -895,11 +1524,13 @@ btnEject.Size = new Size(110, 28);
             lmTop1.Controls.Add(txtFilter);
             lmTop1.Controls.Add(chkRecursive);
             lmTop1.Controls.Add(btnRefreshLM);
+            lmTop1.Controls.Add(btnClearLM);
+            lmTop1.Controls.Add(btnOpenGameListsLM);
             lmTop1.Dock = DockStyle.Top;
             lmTop1.Location = new Point(0, 0);
             lmTop1.Name = "lmTop1";
             lmTop1.Padding = new Padding(8);
-            lmTop1.Size = new Size(992, 46);
+            lmTop1.Size = new Size(1161, 47);
             lmTop1.TabIndex = 2;
             // 
             // btnChooseFolder
@@ -916,13 +1547,13 @@ btnEject.Size = new Size(110, 28);
             lblFilter.Location = new Point(92, 8);
             lblFilter.Name = "lblFilter";
             lblFilter.Padding = new Padding(8, 6, 4, 0);
-            lblFilter.Size = new Size(204, 21);
+            lblFilter.Size = new Size(142, 21);
             lblFilter.TabIndex = 1;
-            lblFilter.Text = "  Filter (e.g. *.iso;*.gcm or *Zelda*): ";
+            lblFilter.Text = " Find a title (e.g. Zelda):";
             // 
             // txtFilter
             // 
-            txtFilter.Location = new Point(302, 11);
+            txtFilter.Location = new Point(240, 11);
             txtFilter.Name = "txtFilter";
             txtFilter.Size = new Size(280, 23);
             txtFilter.TabIndex = 2;
@@ -930,20 +1561,38 @@ btnEject.Size = new Size(110, 28);
             // 
             // chkRecursive
             // 
-            chkRecursive.Location = new Point(588, 11);
+            chkRecursive.Location = new Point(526, 11);
             chkRecursive.Name = "chkRecursive";
             chkRecursive.Size = new Size(104, 24);
             chkRecursive.TabIndex = 3;
             chkRecursive.Text = "Include subfolders";
-                        chkRecursive.Visible = false;
-// 
+            chkRecursive.Visible = false;
+            // 
             // btnRefreshLM
             // 
-            btnRefreshLM.Location = new Point(698, 11);
+            btnRefreshLM.AutoSize = true;
+            btnRefreshLM.Location = new Point(636, 11);
             btnRefreshLM.Name = "btnRefreshLM";
-            btnRefreshLM.Size = new Size(75, 23);
+            btnRefreshLM.Size = new Size(82, 25);
             btnRefreshLM.TabIndex = 4;
-            btnRefreshLM.Text = "Refresh";
+            btnRefreshLM.Text = "Clear Search";
+            // 
+            // btnClearLM
+            // 
+            btnClearLM.Location = new Point(724, 11);
+            btnClearLM.Name = "btnClearLM";
+            btnClearLM.Size = new Size(75, 25);
+            btnClearLM.TabIndex = 999;
+            btnClearLM.Text = "Clear All";
+            // 
+            // btnOpenGameListsLM
+            // 
+            btnOpenGameListsLM.AutoSize = true;
+            btnOpenGameListsLM.Location = new Point(805, 11);
+            btnOpenGameListsLM.Name = "btnOpenGameListsLM";
+            btnOpenGameListsLM.Size = new Size(139, 25);
+            btnOpenGameListsLM.TabIndex = 1000;
+            btnOpenGameListsLM.Text = "Open GameLists Folder";
             // 
             // lmBottom
             // 
@@ -961,7 +1610,7 @@ btnEject.Size = new Size(110, 28);
             lmBottom.Location = new Point(0, 283);
             lmBottom.Name = "lmBottom";
             lmBottom.Padding = new Padding(8);
-            lmBottom.Size = new Size(992, 47);
+            lmBottom.Size = new Size(1161, 47);
             lmBottom.TabIndex = 3;
             // 
             // btnCheckAll
@@ -1045,7 +1694,7 @@ btnEject.Size = new Size(110, 28);
             statusStripLM.Items.AddRange(new ToolStripItem[] { lblStatusLM, lblSepLM1, lblSpacerLM, lblCountLM, lblSepLM2, lblSizeLM });
             statusStripLM.Location = new Point(0, 330);
             statusStripLM.Name = "statusStripLM";
-            statusStripLM.Size = new Size(992, 22);
+            statusStripLM.Size = new Size(1161, 22);
             statusStripLM.TabIndex = 4;
             // 
             // lblStatusLM
@@ -1063,7 +1712,7 @@ btnEject.Size = new Size(110, 28);
             // lblSpacerLM
             // 
             lblSpacerLM.Name = "lblSpacerLM";
-            lblSpacerLM.Size = new Size(575, 17);
+            lblSpacerLM.Size = new Size(744, 17);
             lblSpacerLM.Spring = true;
             // 
             // lblCountLM
@@ -1089,7 +1738,7 @@ btnEject.Size = new Size(110, 28);
             tabSettings.Controls.Add(setPanel);
             tabSettings.Location = new Point(4, 24);
             tabSettings.Name = "tabSettings";
-            tabSettings.Size = new Size(192, 72);
+            tabSettings.Size = new Size(1161, 352);
             tabSettings.TabIndex = 5;
             tabSettings.Text = "Settings";
             // 
@@ -1098,6 +1747,7 @@ btnEject.Size = new Size(110, 28);
             setPanel.AutoScroll = true;
             setPanel.Controls.Add(lblDriveList);
             setPanel.Controls.Add(chkOnlyRemovable);
+            setPanel.Controls.Add(chkEjectPrompt);
             setPanel.Controls.Add(lblCopyTO);
             setPanel.Controls.Add(numCopy);
             setPanel.Controls.Add(lblOWTO);
@@ -1110,7 +1760,7 @@ btnEject.Size = new Size(110, 28);
             setPanel.Location = new Point(0, 0);
             setPanel.Name = "setPanel";
             setPanel.Padding = new Padding(10);
-            setPanel.Size = new Size(192, 72);
+            setPanel.Size = new Size(1161, 352);
             setPanel.TabIndex = 0;
             // 
             // lblDriveList
@@ -1127,16 +1777,26 @@ btnEject.Size = new Size(110, 28);
             chkOnlyRemovable.AutoSize = true;
             chkOnlyRemovable.Checked = true;
             chkOnlyRemovable.CheckState = CheckState.Checked;
-            chkOnlyRemovable.Location = new Point(74, 13);
+            chkOnlyRemovable.Location = new Point(13, 28);
             chkOnlyRemovable.Name = "chkOnlyRemovable";
             chkOnlyRemovable.Size = new Size(226, 19);
             chkOnlyRemovable.TabIndex = 1;
             chkOnlyRemovable.Text = "Only show removable drives (USB/SD)";
             // 
+            // chkEjectPrompt
+            // 
+            chkEjectPrompt.AutoSize = true;
+            chkEjectPrompt.Location = new Point(13, 53);
+            chkEjectPrompt.Name = "chkEjectPrompt";
+            chkEjectPrompt.Size = new Size(147, 19);
+            chkEjectPrompt.TabIndex = 9;
+            chkEjectPrompt.Text = "Show post-run prompt";
+            chkEjectPrompt.UseVisualStyleBackColor = true;
+            // 
             // lblCopyTO
             // 
             lblCopyTO.AutoSize = true;
-            lblCopyTO.Location = new Point(303, 22);
+            lblCopyTO.Location = new Point(10, 87);
             lblCopyTO.Margin = new Padding(0, 12, 0, 0);
             lblCopyTO.Name = "lblCopyTO";
             lblCopyTO.Size = new Size(137, 15);
@@ -1145,7 +1805,7 @@ btnEject.Size = new Size(110, 28);
             // 
             // numCopy
             // 
-            numCopy.Location = new Point(443, 13);
+            numCopy.Location = new Point(13, 105);
             numCopy.Maximum = new decimal(new int[] { 999, 0, 0, 0 });
             numCopy.Name = "numCopy";
             numCopy.Size = new Size(80, 23);
@@ -1155,7 +1815,7 @@ btnEject.Size = new Size(110, 28);
             // lblOWTO
             // 
             lblOWTO.AutoSize = true;
-            lblOWTO.Location = new Point(529, 10);
+            lblOWTO.Location = new Point(13, 131);
             lblOWTO.Name = "lblOWTO";
             lblOWTO.Size = new Size(179, 15);
             lblOWTO.TabIndex = 4;
@@ -1163,7 +1823,7 @@ btnEject.Size = new Size(110, 28);
             // 
             // numOW
             // 
-            numOW.Location = new Point(714, 13);
+            numOW.Location = new Point(13, 149);
             numOW.Maximum = new decimal(new int[] { 999, 0, 0, 0 });
             numOW.Name = "numOW";
             numOW.Size = new Size(80, 23);
@@ -1173,7 +1833,7 @@ btnEject.Size = new Size(110, 28);
             // lblAuto
             // 
             lblAuto.AutoSize = true;
-            lblAuto.Location = new Point(800, 10);
+            lblAuto.Location = new Point(13, 175);
             lblAuto.Name = "lblAuto";
             lblAuto.Size = new Size(124, 15);
             lblAuto.TabIndex = 6;
@@ -1182,14 +1842,14 @@ btnEject.Size = new Size(110, 28);
             // cmbAuto
             // 
             cmbAuto.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbAuto.Location = new Point(930, 13);
+            cmbAuto.Location = new Point(13, 193);
             cmbAuto.Name = "cmbAuto";
             cmbAuto.Size = new Size(80, 23);
             cmbAuto.TabIndex = 7;
             // 
             // btnSaveSettings
             // 
-            btnSaveSettings.Location = new Point(1013, 22);
+            btnSaveSettings.Location = new Point(10, 231);
             btnSaveSettings.Margin = new Padding(0, 12, 0, 0);
             btnSaveSettings.Name = "btnSaveSettings";
             btnSaveSettings.Size = new Size(140, 30);
@@ -1202,7 +1862,7 @@ btnEject.Size = new Size(110, 28);
             grpLog.Dock = DockStyle.Bottom;
             grpLog.Location = new Point(0, 440);
             grpLog.Name = "grpLog";
-            grpLog.Size = new Size(1000, 260);
+            grpLog.Size = new Size(1169, 260);
             grpLog.TabIndex = 1;
             grpLog.TabStop = false;
             grpLog.Text = "Log";
@@ -1216,17 +1876,17 @@ btnEject.Size = new Size(110, 28);
             txtLog.Name = "txtLog";
             txtLog.ReadOnly = true;
             txtLog.ScrollBars = ScrollBars.Vertical;
-            txtLog.Size = new Size(994, 238);
+            txtLog.Size = new Size(1163, 238);
             txtLog.TabIndex = 0;
             txtLog.WordWrap = false;
             // 
             // MainForm
             // 
-            ClientSize = new Size(1000, 700);
-			Controls.Add(tabs);
-			Controls.Add(topPanel);
-			Controls.Add(grpLog);
-            MinimumSize = new Size(900, 600);
+            ClientSize = new Size(1169, 700);
+            Controls.Add(tabs);
+            Controls.Add(topPanel);
+            Controls.Add(grpLog);
+            MinimumSize = new Size(1175, 680);
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "SD-Builder (GUI)";
@@ -1241,25 +1901,43 @@ btnEject.Size = new Size(110, 28);
             xRow.ResumeLayout(false);
             xRow.PerformLayout();
             xListBtns.ResumeLayout(false);
+            xFill.ResumeLayout(false);
+            xFill.PerformLayout();
+            xsTop.ResumeLayout(false);
+            xsTop.PerformLayout();
+            statusStripXS.ResumeLayout(false);
+            statusStripXS.PerformLayout();
             tabSaroo.ResumeLayout(false);
             sRoot.ResumeLayout(false);
             sRoot.PerformLayout();
             sRow.ResumeLayout(false);
             sRow.PerformLayout();
             sListBtns.ResumeLayout(false);
+            sFill.ResumeLayout(false);
+            sFill.PerformLayout();
+            sTop.ResumeLayout(false);
+            sTop.PerformLayout();
+            statusStripSR.ResumeLayout(false);
+            statusStripSR.PerformLayout();
             tabGamecube.ResumeLayout(false);
             gRoot.ResumeLayout(false);
             gRoot.PerformLayout();
             gRow.ResumeLayout(false);
             gRow.PerformLayout();
             gListBtns.ResumeLayout(false);
+            gFill.ResumeLayout(false);
+            gFill.PerformLayout();
+            gcTop.ResumeLayout(false);
+            gcTop.PerformLayout();
+            statusStripGC.ResumeLayout(false);
+            statusStripGC.PerformLayout();
             tabSC64.ResumeLayout(false);
             scRoot.ResumeLayout(false);
             scRoot.PerformLayout();
             scRow.ResumeLayout(false);
             scRow.PerformLayout();
+            flowLayoutPanel1.ResumeLayout(false);
             scListBtns.ResumeLayout(false);
-            scFill.ResumeLayout(false);
             tabListmaker.ResumeLayout(false);
             tabListmaker.PerformLayout();
             lmTop2.ResumeLayout(false);
@@ -1278,6 +1956,7 @@ btnEject.Size = new Size(110, 28);
             grpLog.ResumeLayout(false);
             grpLog.PerformLayout();
             ResumeLayout(false);
+
         }
 
         protected override void Dispose(bool disposing)
@@ -1323,5 +2002,30 @@ btnEject.Size = new Size(110, 28);
         private Label lblCopyTO;
         private Label lblOWTO;
         private Label lblAuto;
+
+        // Xstation - Listmaker-style controls
+        private System.Windows.Forms.FlowLayoutPanel xsTop;
+        private System.Windows.Forms.Label lblXsMode;
+        private System.Windows.Forms.RadioButton rbXsFiles;
+        private System.Windows.Forms.RadioButton rbXsDirs;
+        private System.Windows.Forms.Button btnXsChoose;
+        private System.Windows.Forms.Button btnXsCheckAll;
+        private System.Windows.Forms.Button btnXsUncheckAll;
+        private System.Windows.Forms.Button btnXsStart;
+        private System.Windows.Forms.ListView lvXsList;
+
+        // Xstation status bar
+        private System.Windows.Forms.StatusStrip statusStripXS;
+        private System.Windows.Forms.ToolStripStatusLabel lblStatusXS;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepXS1;
+        private System.Windows.Forms.ToolStripStatusLabel lblSpacerXS;
+        private System.Windows.Forms.ToolStripStatusLabel lblCountXS;
+        private System.Windows.Forms.ToolStripStatusLabel lblSepXS2;
+        private System.Windows.Forms.ToolStripStatusLabel lblSizeXS;
+        private System.Windows.Forms.Button btnClearLM;
+        private System.Windows.Forms.Button btnOpenGameListsLM;
+
+        private FlowLayoutPanel flowLayoutPanel1;
     }
+            
 }
