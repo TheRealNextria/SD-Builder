@@ -25,28 +25,28 @@ namespace SDBuilderWin
     public sealed partial class MainForm : Form
     {
 
-// Clears search, imported .txt items, and checked state, then rebuilds from the chosen folder
-private void ClearListmakerData()
-{
-    try
-    {
-        _lmBulkChange = true;
-        _lmFilterDebounce?.Stop(); // prevent auto-refresh from typing
-        _lmFolder = string.Empty;  // forget chosen folder for true reset
-        if (txtFilter != null) txtFilter.Text = string.Empty;
-        _lmTxtItems.Clear();
-        _lmChecked.Clear();
-        lvList.BeginUpdate();
-        lvList.Items.Clear();
-        try { SetCounters(0, 0); } catch { /* best-effort */ }
-    }
-    finally
-    {
-        try { lvList.EndUpdate(); } catch { /* ignore */ }
-        _lmBulkChange = false;
-    }
-    try { lblStatusLM.Text = "Choose a folder or open a .txt file to begin."; } catch { /* ignore */ }
-}
+        // Clears search, imported .txt items, and checked state, then rebuilds from the chosen folder
+        private void ClearListmakerData()
+        {
+            try
+            {
+                _lmBulkChange = true;
+                _lmFilterDebounce?.Stop(); // prevent auto-refresh from typing
+                _lmFolder = string.Empty;  // forget chosen folder for true reset
+                if (txtFilter != null) txtFilter.Text = string.Empty;
+                _lmTxtItems.Clear();
+                _lmChecked.Clear();
+                lvList.BeginUpdate();
+                lvList.Items.Clear();
+                try { SetCounters(0, 0); } catch { /* best-effort */ }
+            }
+            finally
+            {
+                try { lvList.EndUpdate(); } catch { /* ignore */ }
+                _lmBulkChange = false;
+            }
+            try { SetLmStatus("Choose a folder or open a .txt file to begin."); } catch { /* ignore */ }
+        }
 
         const string AppVersion = "v2.31";
 
@@ -62,6 +62,9 @@ private void ClearListmakerData()
         // Gamecube state
         string _gcFolder = string.Empty;
         bool _gcBulkChange = false;
+        string _scFolder = string.Empty;
+        bool _scBulkChange = false;
+
         CancellationTokenSource? _gcScanCts;
         System.Windows.Forms.Timer? _glPoll;
         string _glLastSig = string.Empty;
@@ -153,6 +156,9 @@ private void ClearListmakerData()
             // Wire Gamecube controls (listmaker)
             WireGamecubeListmaker();
 
+            // Wire Summercart64 controls (listmaker)
+            WireSummercartListmaker();
+
             // Icon & title
             this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             Text = $"SD-Builder (GUI) {AppVersion}";
@@ -170,9 +176,13 @@ private void ClearListmakerData()
                     {
                         Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
                         InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir
-                    };
+
+            
+        };
                     if (ofd.ShowDialog(this) == DialogResult.OK) OpenTxtFile(ofd.FileName);
-                    e.Handled = true;
+                    
+            StartListmakerAutoScan();
+        e.Handled = true;
                 }
                 else if (e.Control && e.KeyCode == Keys.S)
                 {
@@ -262,7 +272,7 @@ private void ClearListmakerData()
                 {
                     if (Directory.Exists(path))
                     {
-                        lblStatusLM.Text = "Loading...";
+                        SetLmStatus("Loading...");
                         _lmFolder = path;
                         SaveSettings();
                         RefreshListmakerList();
@@ -306,7 +316,7 @@ private void ClearListmakerData()
                     try
                     {
                         lvList.Items.Clear();
-                        lblStatusLM.Text = "Choose a folder or open a .txt file to begin.";
+                        SetLmStatus("Choose a folder or open a .txt file to begin.");
                     }
                     catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
                 }
@@ -375,7 +385,7 @@ private void ClearListmakerData()
                 // Disabled auto-load of last folder on startup (Option 2)
                 // if (Directory.Exists(_lmFolder))
                 {
-                    lblStatusLM.Text = "Loading...";
+                    SetLmStatus("Loading...");
                     RefreshListmakerList();
                 }
 
@@ -389,11 +399,15 @@ private void ClearListmakerData()
                     }
                     finally
                     {
-                        try { lvList.EndUpdate();
-                _lmBulkChange = false; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                        try
+                        {
+                            lvList.EndUpdate();
+                            _lmBulkChange = false;
+                        }
+                        catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
                     }
                 }
-                try { lblStatusLM.Text = "Choose a folder or open a .txt file to begin."; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                try { SetLmStatus("Choose a folder or open a .txt file to begin."); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
                 try { SetCounters(0, 0); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
             };
 
@@ -510,86 +524,106 @@ private void ClearListmakerData()
                 using var dlg = new FolderBrowserDialog { ShowNewFolderButton = false };
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
-                    lblStatusLM.Text = "Loading...";
+                    SetLmStatus("Loading...");
                     _lmFolder = dlg.SelectedPath;
                     RefreshListmakerList();
                 }
             };
             btnRefreshLM.Click += (_, __) => { txtFilter.Text = string.Empty; RefreshListmakerList(); };
-            
-btnOpenGameListsLM.Click += (_, __) =>
-{
-    try
-    {
-        var gl = System.IO.Path.Combine(AppContext.BaseDirectory, "GameLists");
-        System.Diagnostics.Process.Start("explorer.exe", gl);
-    }
-    catch (Exception ex)
-    {
-        MessageBox.Show($"Could not open GameLists folder: {ex.Message}", "Open GameLists", MessageBoxButtons.OK, MessageBoxIcon.Error);
-    }
-};
+
+            btnOpenGameListsLM.Click += (_, __) =>
+            {
+                try
+                {
+                    var gl = System.IO.Path.Combine(AppContext.BaseDirectory, "GameLists");
+                    System.Diagnostics.Process.Start("explorer.exe", gl);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Could not open GameLists folder: {ex.Message}", "Open GameLists", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
 
             btnClearLM.Click += (_, __) => { ClearListmakerData(); };
             chkRecursive.CheckedChanged += (_, __) => RefreshListmakerList();
             rbFiles.CheckedChanged += (_, __) => { if (rbFiles.Checked && txtFilter.Text.Trim() == "*") txtFilter.Text = "*.*"; RefreshListmakerList(); };
-            rbDirs.CheckedChanged += (_, __) => { if (rbDirs.Checked && (txtFilter.Text.Trim() == "*.*" || txtFilter.Text.Trim().Length == 0)) txtFilter.Text = "*"; RefreshListmakerList(); };
+            rbDirs.CheckedChanged += (_, __) => { if (rbDirs.Checked && (txtFilter.Text.Trim() == "*.*" || txtFilter.Text.Trim().Length == 0)) txtFilter.Text = "*"; RefreshListmakerList(); };            rbMixed.CheckedChanged += (_, __) => RefreshListmakerList();
 
-            btnCheckAll.Click += (_, __) => {
+
+            btnCheckAll.Click += (_, __) =>
+            {
                 _lmBulkChange = true;
-                try {
+                try
+                {
                     lvList.BeginUpdate();
-                    for (int i = 0; i < lvList.Items.Count; i++) {
+                    for (int i = 0; i < lvList.Items.Count; i++)
+                    {
                         var it = lvList.Items[i];
                         it.Checked = true;
                     }
-                } finally {
+                }
+                finally
+                {
                     lvList.EndUpdate();
                     _lmBulkChange = false;
                 }
-                try {
-                    foreach (ListViewItem it in lvList.Items) {
+                try
+                {
+                    foreach (ListViewItem it in lvList.Items)
+                    {
                         var p = it.Text;
                         if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Add(p);
                     }
-                } catch { }
+                }
+                catch { }
                 _lmDebounce?.Stop(); _lmDebounce?.Start();
             };
-                try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p) && it.Checked) _lmChecked.Add(p); } } catch { }
+            try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p) && it.Checked) _lmChecked.Add(p); } } catch { }
             ;
-            btnUncheckAll.Click += (_, __) => {
+            btnUncheckAll.Click += (_, __) =>
+            {
                 _lmBulkChange = true;
-                try {
+                try
+                {
                     lvList.BeginUpdate();
-                    for (int i = 0; i < lvList.Items.Count; i++) {
+                    for (int i = 0; i < lvList.Items.Count; i++)
+                    {
                         var it = lvList.Items[i];
                         it.Checked = false;
                     }
-                } finally {
+                }
+                finally
+                {
                     lvList.EndUpdate();
                     _lmBulkChange = false;
                 }
-                try {
-                    foreach (ListViewItem it in lvList.Items) {
+                try
+                {
+                    foreach (ListViewItem it in lvList.Items)
+                    {
                         var p = it.Text;
                         if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p);
                     }
-                } catch { }
+                }
+                catch { }
                 _lmDebounce?.Stop(); _lmDebounce?.Start();
             };
-                try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p); } } catch { }
+            try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p); } } catch { }
             ;
             btnDeleteSelected.Click += (_, __) =>
             {
                 if (lvList.SelectedItems.Count == 0) { MessageBox.Show(this, "No items selected to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
                 foreach (ListViewItem it in lvList.SelectedItems.Cast<ListViewItem>().ToList()) lvList.Items.Remove(it);
-                lblStatusLM.Text = "Deleted selected items.";
-                _ = RecalcCountersAsync();
+                SetLmStatus("Deleted selected items.");
+                StartListmakerAutoScan();
             };
 
             btnOpenTxt.Click += (_, __) =>
             {
-                using var ofd = new OpenFileDialog { Title = "Open text file with paths", Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*", InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir };
+                using var ofd = new OpenFileDialog { Title = "Open text file with paths", Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*", InitialDirectory = Directory.Exists(GameListsDir) ? GameListsDir : ScriptDir 
+
+            
+        };
                 if (ofd.ShowDialog(this) != DialogResult.OK) return;
 
                 string[] lines;
@@ -622,9 +656,9 @@ btnOpenGameListsLM.Click += (_, __) =>
                 lvList.EndUpdate();
                 _lmBulkChange = false;
 
-                lblStatusLM.Text = $"Loaded {added} new, skipped {dupes} duplicates from: {ofd.FileName}";
+                SetLmStatus($"Loaded {added} new, skipped {dupes} duplicates from: {ofd.FileName}");
                 if (chkAutoValidate.Checked) ValidatePaths();
-                _ = RecalcCountersAsync();
+                StartListmakerAutoScan();
             };
 
             btnValidateNow.Click += (_, __) => { ValidatePaths(); };
@@ -647,7 +681,7 @@ btnOpenGameListsLM.Click += (_, __) =>
             };
 
             // Defaults
-            lblStatusLM.Text = "Choose a folder or open a .txt file to begin.";
+            SetLmStatus("Choose a folder or open a .txt file to begin.");
             SetCounters(0, 0);
         }
 
@@ -656,6 +690,21 @@ btnOpenGameListsLM.Click += (_, __) =>
         {
             try { lblStatusXS.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
         }
+        
+        void SetLmStatus(object? textObj)
+        {
+            try
+            {
+                string text = textObj?.ToString() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(text))
+                    lblStatusLM.Text = text;
+            }
+            catch (Exception ex)
+            {
+                Warn("Exception suppressed: " + ex.Message);
+            }
+        }
+
 
         void WireXstationListmaker()
         {
@@ -967,6 +1016,196 @@ btnOpenGameListsLM.Click += (_, __) =>
             };
         }
 
+
+        void WireSummercartListmaker()
+        {
+// Mirrors Xstation: rebuild list for current folder + mode
+void RefreshScList()
+{
+    lvScList.BeginUpdate();
+    try
+    {
+        lvScList.Items.Clear();
+        UpdateScCounters();
+        if (string.IsNullOrWhiteSpace(_scFolder) || !Directory.Exists(_scFolder))
+        {
+            SetScStatus("Ready.");
+            return;
+        }
+
+        SetScStatus("Scanning...");
+        AutoSizeSc();
+
+        // Ensure 2 columns exist (Path + Status)
+        if (lvScList.Columns.Count < 2)
+        {
+            lvScList.Columns.Clear();
+            lvScList.Columns.Add("Path", -2, HorizontalAlignment.Left);
+            lvScList.Columns.Add("Status", 160, HorizontalAlignment.Left);
+        }
+
+        if (rbScFiles.Checked)
+        {
+            foreach (var f in Directory.EnumerateFiles(_scFolder, "*", SearchOption.TopDirectoryOnly))
+            {
+                var it = new ListViewItem(f);
+                it.SubItems.Add("scanning...");
+                it.Tag = (long?)null;
+                lvScList.Items.Add(it);
+            }
+        }
+        else
+        {
+            foreach (var d in Directory.EnumerateDirectories(_scFolder, "*", SearchOption.TopDirectoryOnly))
+            {
+                var it = new ListViewItem(d);
+                it.SubItems.Add("scanning...");
+                it.Tag = (long?)null;
+                lvScList.Items.Add(it);
+            }
+        }
+
+        // Background size pass (same pattern as other tabs)
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                foreach (ListViewItem it in lvScList.Items)
+                {
+                    var p = it.Text;
+                    long sz = 0;
+                    try
+                    {
+                        if (File.Exists(p))
+                        {
+                            sz = new FileInfo(p).Length;
+                        }
+                        else if (Directory.Exists(p))
+                        {
+                            foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories))
+                            {
+                                try { sz += new FileInfo(f).Length; } catch { }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        BeginInvoke(new Action(() =>
+                        {
+                            it.Tag = sz;
+                            it.SubItems[1].Text = (File.Exists(p) || Directory.Exists(p)) ? FormatSize(sz) : "Missing";
+                            UpdateScCounters();
+                        }));
+                    }
+                    catch { }
+                }
+
+                BeginInvoke(new Action(() => SetScStatus("Ready.")));
+            }
+            catch { }
+        });
+    }
+    finally
+    {
+        lvScList.EndUpdate();
+    }
+}
+
+            // columns
+            lvScList.View = View.Details;
+            lvScList.FullRowSelect = true;
+            lvScList.HideSelection = false;
+            if (lvScList.Columns.Count < 2)
+            {
+                lvScList.Columns.Clear();
+                lvScList.Columns.Add("Path", -2, HorizontalAlignment.Left);
+                lvScList.Columns.Add("Status", 160, HorizontalAlignment.Left);
+            }
+
+            void AutoSizeSc()
+            {
+                if (lvScList.Columns.Count >= 2)
+                {
+                    int statusWidth = 160;
+                    lvScList.Columns[0].Width = Math.Max(120, lvScList.ClientSize.Width - statusWidth - 8);
+                    lvScList.Columns[1].Width = statusWidth;
+                }
+            }
+            lvScList.Resize += (_, __) => AutoSizeSc();
+            tabSC64.Enter += (_, __) => AutoSizeSc();
+
+            void SetScStatus(string text)
+            {
+                try { lblStatusSC.Text = text; } catch { /* ignore */ }
+            }
+            void UpdateScCounters()
+            {
+                try
+                {
+                    int total = lvScList.Items.Count;
+                    int checkedCount = 0;
+                    long bytes = 0;
+                    foreach (ListViewItem it in lvScList.Items)
+                    {
+                        if (it.Checked) { checkedCount++; if (it.Tag is long b) bytes += b; }
+                    }
+                    lblCountSC.Text = $"Checked: {checkedCount}";
+                    lblSizeSC.Text = $"Size: {FormatSize(bytes)}";
+                }
+                catch { /* ignore */ }
+            }
+
+            btnScChoose.Click += (_, __) =>
+            {
+using var dlg = new FolderBrowserDialog { Description = "Choose folder to scan" };
+if (!string.IsNullOrEmpty(_scFolder) && Directory.Exists(_scFolder))
+    dlg.SelectedPath = _scFolder;
+
+if (dlg.ShowDialog(this) == DialogResult.OK)
+{
+    _scFolder = dlg.SelectedPath;
+    RefreshScList();
+}
+};
+
+            lvScList.ItemChecked += (_, __) => { if (!_scBulkChange) UpdateScCounters(); };
+
+            btnScCheckAll.Click += (_, __) =>
+            {
+                _scBulkChange = true;
+                foreach (ListViewItem it in lvScList.Items) it.Checked = true;
+                _scBulkChange = false;
+                UpdateScCounters();
+            };
+            btnScUncheckAll.Click += (_, __) =>
+            {
+                _scBulkChange = true;
+                foreach (ListViewItem it in lvScList.Items) it.Checked = false;
+                _scBulkChange = false;
+                UpdateScCounters();
+            };
+            btnScStart.Click += async (_, __) =>
+            {
+                await WithDriveJobAsync((d, token) => CopySummercartCheckedAsync(d, token));
+            };
+        
+rbScFiles.CheckedChanged += (_, __) =>
+{
+    if (!rbScFiles.Checked) return;
+    RefreshScList();
+};
+
+rbScDirs.CheckedChanged += (_, __) =>
+{
+    if (!rbScDirs.Checked) return;
+    RefreshScList();
+};
+}
+
+
+
         void SetGcStatus(string text)
         {
             try { lblStatusGC.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
@@ -1115,6 +1354,29 @@ btnOpenGameListsLM.Click += (_, __) =>
 
             if (copied == 0) Warn("No items checked.");
         }
+
+        async Task CopySummercartCheckedAsync(string destDrive, CancellationToken token)
+        {
+            string destRoot = $@"{destDrive}:\Roms";
+            Directory.CreateDirectory(destRoot);
+            int copied = 0;
+
+            foreach (ListViewItem it in lvScList.Items)
+            {
+                if (!it.Checked) continue;
+                var path = it.Text;
+                if (!File.Exists(path) && !Directory.Exists(path))
+                {
+                    Info($"[SKIP] Not found: \"{path}\"");
+                    continue;
+                }
+                await CopyEntry(path, Platform.Summercart64, destRoot, token);
+                copied++;
+            }
+
+            if (copied == 0) Warn("No items checked.");
+        }
+
 
         void RefreshSarooList()
         {
@@ -2428,7 +2690,7 @@ btnOpenGameListsLM.Click += (_, __) =>
             foreach (var it in rows)
             {
                 var pth = it.Text;
-                bool exists = rbFiles.Checked ? File.Exists(pth) : Directory.Exists(pth);
+                bool exists = File.Exists(pth) || Directory.Exists(pth);
                 it.Tag = null;
                 it.SubItems[1].Text = exists ? "scanning…" : "Missing";
             }
@@ -2450,14 +2712,8 @@ btnOpenGameListsLM.Click += (_, __) =>
                             token.ThrowIfCancellationRequested();
                             var p = itemRef.Text;
                             long sz = 0;
-                            if (rbFiles.Checked)
-                            {
-                                if (File.Exists(p)) sz = SafeFileLength(p);
-                            }
-                            else
-                            {
-                                if (Directory.Exists(p)) sz = SafeDirLength(p, token, recursive: chkRecursive.Checked);
-                            }
+                            if (File.Exists(p)) { sz = SafeFileLength(p); }
+                            else if (Directory.Exists(p)) { sz = SafeDirLength(p, token, recursive: chkRecursive.Checked); }
                             // post result
                             if (!IsDisposed && lvList.IsHandleCreated)
                             {
@@ -2467,7 +2723,7 @@ btnOpenGameListsLM.Click += (_, __) =>
                                     {
                                         if (itemRef.ListView == null) return;
                                         itemRef.Tag = sz;
-                                        var existsNow = rbFiles.Checked ? File.Exists(p) : Directory.Exists(p);
+                                        var existsNow = File.Exists(p) || Directory.Exists(p);
                                         itemRef.SubItems[1].Text = existsNow ? FormatSize(sz) : "Missing";
                                         UpdateLmTotalsFromItems();
                                     }));
@@ -2487,6 +2743,109 @@ btnOpenGameListsLM.Click += (_, __) =>
             }
         }
 
+        private async Task RecalcListmakerAllAsync()
+        {
+            try
+            {
+                // we don't want to interfere with the user's checkmarks;
+                // just compute sizes/status for ALL rows currently listed.
+                var token = _lmScanCts?.Token ?? System.Threading.CancellationToken.None;
+                var rows = lvList.Items.Cast<ListViewItem>().ToList();
+
+                // prime
+                foreach (var it in rows)
+                {
+                    var pth = it.Text;
+                    bool exists = System.IO.File.Exists(pth) || System.IO.Directory.Exists(pth);
+                    it.Tag = null;
+                    it.SubItems[1].Text = exists ? "scanning…" : "Missing";
+                }
+
+                // throttle parallelism
+                var tasks = new List<Task>();
+                int parallel = Environment.ProcessorCount > 4 ? 4 : 2;
+                using (var sem = new System.Threading.SemaphoreSlim(parallel, parallel))
+                {
+                    foreach (var it in rows)
+                    {
+                        await sem.WaitAsync(token).ConfigureAwait(false);
+                        var itemRef = it;
+                        var task = Task.Run(() =>
+                        {
+                            try
+                            {
+                                var p = itemRef.Text;
+                                long sz = 0;
+                                if (System.IO.File.Exists(p)) sz = SafeFileLength(p);
+                                else if (System.IO.Directory.Exists(p)) sz = SafeDirLength(p, token, recursive: chkRecursive.Checked);
+
+                                if (!IsDisposed && lvList.IsHandleCreated)
+                                {
+                                    try
+                                    {
+                                        lvList.BeginInvoke(new Action(() =>
+                                        {
+                                            if (itemRef.ListView == null) return;
+                                            itemRef.Tag = sz;
+                                            var existsNow = System.IO.File.Exists(p) || System.IO.Directory.Exists(p);
+                                            itemRef.SubItems[1].Text = existsNow ? FormatSize(sz) : "Missing";
+                                            UpdateLmTotalsFromItems();
+                                        }));
+                                    }
+                                    catch { }
+                                }
+                            }
+                            catch { }
+                            finally
+                            {
+                                sem.Release();
+                            }
+                        }, token);
+                        tasks.Add(task);
+                    }
+                    try { await Task.WhenAll(tasks); } catch { }
+                }
+            }
+            catch { /* ignore */ }
+        
+                // Final sweep for any lingering 'scanning…' statuses
+                if (!IsDisposed && lvList.IsHandleCreated)
+                {
+                    try
+                    {
+                        lvList.BeginInvoke(new Action(() =>
+                        {
+                            foreach (ListViewItem it in lvList.Items)
+                            {
+                                if (it.SubItems.Count < 2) continue;
+                                if (it.SubItems[1].Text.Contains("scanning"))
+                                {
+                                    var p = it.Text;
+                                    long sz = 0;
+                                    bool exists = System.IO.File.Exists(p) || System.IO.Directory.Exists(p);
+                                    if (exists)
+                                    {
+                                        if (System.IO.File.Exists(p)) sz = SafeFileLength(p);
+                                        else sz = SafeDirLength(p, System.Threading.CancellationToken.None, recursive: chkRecursive.Checked);
+                                        it.Tag = sz;
+                                        it.SubItems[1].Text = FormatSize(sz);
+                                    }
+                                    else
+                                    {
+                                        it.SubItems[1].Text = "Missing";
+                                    }
+                                }
+                            }
+                            UpdateLmTotalsFromItems();
+                        }));
+                    }
+                    catch { }
+                }
+        
+            try { BeginInvoke(new Action(() => SetLmStatus("Ready."))); } catch { }
+}
+
+
         void ValidatePaths()
         {
             int ok = 0, missing = 0;
@@ -2494,13 +2853,13 @@ btnOpenGameListsLM.Click += (_, __) =>
             foreach (ListViewItem it in lvList.Items)
             {
                 var p = it.Text;
-                bool exists = rbFiles.Checked ? File.Exists(p) : Directory.Exists(p);
+                bool exists = File.Exists(p) || Directory.Exists(p);
                 it.SubItems[1].Text = exists ? "OK" : "Missing";
                 if (exists) ok++; else missing++;
             }
             lvList.EndUpdate();
-                _lmBulkChange = false;
-            lblStatusLM.Text = $"Validated: {ok} OK, {missing} missing.";
+            _lmBulkChange = false;
+            SetLmStatus($"Validated: {ok} OK, {missing} missing.");
         }
 
         void SaveTxt()
@@ -2529,7 +2888,7 @@ btnOpenGameListsLM.Click += (_, __) =>
                 if (it.Checked) lines.Add(it.Text);
 
             File.WriteAllLines(sfd.FileName, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            lblStatusLM.Text = $"Saved {lines.Count} items to: {sfd.FileName}";
+            SetLmStatus($"Saved {lines.Count} items to: {sfd.FileName}");
         }
         void OpenTxtFile(string path)
         {
@@ -2559,11 +2918,11 @@ btnOpenGameListsLM.Click += (_, __) =>
                 added++;
             }
             lvList.EndUpdate();
-                _lmBulkChange = false;
+            _lmBulkChange = false;
 
-            lblStatusLM.Text = $"Loaded {added} new, skipped {dupes} duplicates from: {path}";
+            SetLmStatus($"Loaded {added} new, skipped {dupes} duplicates from: {path}");
             if (chkAutoValidate.Checked) ValidatePaths();
-            _ = RecalcCountersAsync();
+            StartListmakerAutoScan();
         }
         void WireListContextMenu()
         {
@@ -2574,7 +2933,7 @@ btnOpenGameListsLM.Click += (_, __) =>
             cm.Items.Add("Remove", null, (_, __) =>
             {
                 foreach (ListViewItem it in lvList.SelectedItems) lvList.Items.Remove(it);
-                _ = RecalcCountersAsync();
+                StartListmakerAutoScan();
             });
             lvList.ContextMenuStrip = cm;
         }
@@ -2601,8 +2960,8 @@ btnOpenGameListsLM.Click += (_, __) =>
 
         }
 
-        
-void RefreshListmakerList()
+
+        void RefreshListmakerList()
         {
             lvList.BeginUpdate();
             _lmBulkChange = true;
@@ -2623,20 +2982,30 @@ void RefreshListmakerList()
                 bool hasFolder = !string.IsNullOrWhiteSpace(_lmFolder) && Directory.Exists(_lmFolder);
                 if (hasFolder)
                 {
-                    if (rbFiles.Checked)
+                    
+                    if (rbMixed.Checked)
                     {
-                        // Enumerate all files; filtering is applied later to the union
+                        // Mixed: top-level files + folders only
+                        var root = _lmFolder;
+                        IEnumerable<string> files = Enumerable.Empty<string>();
+                        IEnumerable<string> dirs  = Enumerable.Empty<string>();
+                        try { files = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly); } catch { }
+                        try { dirs  = Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly); } catch { }
+                        folderItems = files.Concat(dirs);
+                    }
+                    else if (rbFiles.Checked)
+                    {
                         folderItems = Directory.EnumerateFiles(_lmFolder, "*", opt);
                     }
                     else
                     {
-                        // Enumerate all directories; filtering is applied later
                         folderItems = Directory.EnumerateDirectories(_lmFolder, "*", opt);
                     }
+
                 }
                 else
                 {
-                    lblStatusLM.Text = "No folder selected.";
+                    SetLmStatus("No folder selected.");
                 }
 
                 // Combine persisted .txt items with current folder items with current folder items
@@ -2662,30 +3031,61 @@ void RefreshListmakerList()
                     }
                 }
 
-                                // Populate list
+                // Populate list
                 foreach (var path in final)
                     AddRowLM(path);
 
                 // Restore checked state
-                try {
+                try
+                {
                     _lmBulkChange = true;
                     foreach (ListViewItem it in lvList.Items)
                     {
                         var p = it.Text;
                         it.Checked = !string.IsNullOrWhiteSpace(p) && _lmChecked.Contains(p);
                     }
-                } finally { _lmBulkChange = false; }
+                }
+                finally { _lmBulkChange = false; }
 
-                lblStatusLM.Text = $"Showing {final.Count()} items";
+                SetLmStatus($"Showing {final.Count()} items");
 
-                _ = RecalcCountersAsync();
+                StartListmakerAutoScan();
             }
             finally
             {
                 lvList.EndUpdate();
                 _lmBulkChange = false;
             }
+        
+            StartListmakerAutoScan();
         }
+
+        private void StartListmakerAutoScan()
+{
+            SetLmStatus("Scanning...");
+
+    try
+    {
+        _lmScanCts?.Cancel();
+        _lmScanCts?.Dispose();
+    }
+    catch { }
+
+    _lmScanCts = new System.Threading.CancellationTokenSource();
+
+    _ = System.Threading.Tasks.Task.Run(async () =>
+    {
+        try
+        {
+            await RecalcListmakerAllAsync().ConfigureAwait(false);
+        }
+        catch (System.OperationCanceledException) { }
+        catch { }
+    });
+}
+
+    
+
 
 
         async Task CopyXstationCheckedAsync(string destDrive, CancellationToken token)
@@ -2759,6 +3159,11 @@ void RefreshListmakerList()
         }
 
         private void btnGcCheckAll_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnSC64Install64DD_Click(object sender, EventArgs e)
         {
 
         }

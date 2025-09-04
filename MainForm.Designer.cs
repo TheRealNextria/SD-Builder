@@ -107,7 +107,8 @@ namespace SDBuilderWin
         private Button btnRefreshLM;
         private RadioButton rbFiles;
         private RadioButton rbDirs;
-        private ListView lvList;
+                private System.Windows.Forms.RadioButton rbMixed;
+private ListView lvList;
         private Button btnCheckAll;
         private Button btnUncheckAll;
         private Button btnDeleteSelected;
@@ -137,6 +138,7 @@ namespace SDBuilderWin
 
         private void InitializeComponent()
         {
+            rbMixed = new RadioButton();
             topPanel = new Panel();
             driveRow = new FlowLayoutPanel();
             lblDrive = new Label();
@@ -250,6 +252,24 @@ namespace SDBuilderWin
             btnSC64Start = new Button();
             scExtras = new FlowLayoutPanel();
             scFill = new Panel();
+            statusStripSC = new StatusStrip();
+            lblStatusSC = new ToolStripStatusLabel();
+            lblSepSC1 = new ToolStripStatusLabel();
+            lblSpacerSC = new ToolStripStatusLabel();
+            lblCountSC = new ToolStripStatusLabel();
+            lblSepSC2 = new ToolStripStatusLabel();
+            lblSizeSC = new ToolStripStatusLabel();
+            lvScList = new ListView();
+            colPathSC = new ColumnHeader();
+            colStatusSC = new ColumnHeader();
+            scTop = new FlowLayoutPanel();
+            lblScMode = new Label();
+            rbScFiles = new RadioButton();
+            rbScDirs = new RadioButton();
+            btnScChoose = new Button();
+            btnScCheckAll = new Button();
+            btnScUncheckAll = new Button();
+            btnScStart = new Button();
             tabListmaker = new TabPage();
             lvList = new ListView();
             colPathLM = new ColumnHeader();
@@ -326,6 +346,9 @@ namespace SDBuilderWin
             scRow.SuspendLayout();
             flowLayoutPanel1.SuspendLayout();
             scListBtns.SuspendLayout();
+            scFill.SuspendLayout();
+            statusStripSC.SuspendLayout();
+            scTop.SuspendLayout();
             tabListmaker.SuspendLayout();
             lmTop2.SuspendLayout();
             lmTop1.SuspendLayout();
@@ -337,6 +360,17 @@ namespace SDBuilderWin
             ((System.ComponentModel.ISupportInitialize)numOW).BeginInit();
             grpLog.SuspendLayout();
             SuspendLayout();
+            // 
+            // rbMixed
+            // 
+            rbMixed.Location = new Point(256, 12);
+            rbMixed.Margin = new Padding(6, 4, 3, 3);
+            rbMixed.Name = "rbMixed";
+            rbMixed.Size = new Size(60, 23);
+            rbMixed.TabIndex = 0;
+            rbMixed.TabStop = true;
+            rbMixed.Text = "Mixed";
+            rbMixed.UseVisualStyleBackColor = true;
             // 
             // topPanel
             // 
@@ -657,7 +691,7 @@ namespace SDBuilderWin
             btnXsCheckAll.Name = "btnXsCheckAll";
             btnXsCheckAll.Size = new Size(75, 25);
             btnXsCheckAll.TabIndex = 4;
-            btnXsCheckAll.Text = "Check all";
+            btnXsCheckAll.Text = "Check All";
             // 
             // btnXsUncheckAll
             // 
@@ -665,19 +699,19 @@ namespace SDBuilderWin
             btnXsUncheckAll.Location = new Point(370, 8);
             btnXsUncheckAll.Margin = new Padding(0, 8, 8, 8);
             btnXsUncheckAll.Name = "btnXsUncheckAll";
-            btnXsUncheckAll.Size = new Size(78, 25);
+            btnXsUncheckAll.Size = new Size(80, 25);
             btnXsUncheckAll.TabIndex = 5;
-            btnXsUncheckAll.Text = "Uncheck all";
+            btnXsUncheckAll.Text = "Uncheck All";
             // 
             // btnXsStart
             // 
             btnXsStart.AutoSize = true;
-            btnXsStart.Location = new Point(456, 8);
+            btnXsStart.Location = new Point(458, 8);
             btnXsStart.Margin = new Padding(0, 8, 8, 8);
             btnXsStart.Name = "btnXsStart";
-            btnXsStart.Size = new Size(96, 25);
+            btnXsStart.Size = new Size(98, 25);
             btnXsStart.TabIndex = 6;
-            btnXsStart.Text = "Start (checked)";
+            btnXsStart.Text = "Start (Checked)";
             // 
             // statusStripXS
             // 
@@ -931,7 +965,7 @@ namespace SDBuilderWin
             btnSrCheckAll.Name = "btnSrCheckAll";
             btnSrCheckAll.Size = new Size(75, 25);
             btnSrCheckAll.TabIndex = 4;
-            btnSrCheckAll.Text = "Check all";
+            btnSrCheckAll.Text = "Check All";
             // 
             // btnSrUncheckAll
             // 
@@ -939,19 +973,19 @@ namespace SDBuilderWin
             btnSrUncheckAll.Location = new Point(370, 8);
             btnSrUncheckAll.Margin = new Padding(0, 8, 8, 8);
             btnSrUncheckAll.Name = "btnSrUncheckAll";
-            btnSrUncheckAll.Size = new Size(78, 25);
+            btnSrUncheckAll.Size = new Size(80, 25);
             btnSrUncheckAll.TabIndex = 5;
-            btnSrUncheckAll.Text = "Uncheck all";
+            btnSrUncheckAll.Text = "Uncheck All";
             // 
             // btnSrStart
             // 
             btnSrStart.AutoSize = true;
-            btnSrStart.Location = new Point(456, 8);
+            btnSrStart.Location = new Point(458, 8);
             btnSrStart.Margin = new Padding(0, 8, 8, 8);
             btnSrStart.Name = "btnSrStart";
-            btnSrStart.Size = new Size(96, 25);
+            btnSrStart.Size = new Size(98, 25);
             btnSrStart.TabIndex = 6;
-            btnSrStart.Text = "Start (checked)";
+            btnSrStart.Text = "Start (Checked)";
             // 
             // statusStripSR
             // 
@@ -1216,28 +1250,30 @@ namespace SDBuilderWin
             btnGcCheckAll.Name = "btnGcCheckAll";
             btnGcCheckAll.Size = new Size(75, 25);
             btnGcCheckAll.TabIndex = 4;
-            btnGcCheckAll.Text = "Check all";
+            btnGcCheckAll.Text = "Check All";
             btnGcCheckAll.UseVisualStyleBackColor = true;
             btnGcCheckAll.Click += btnGcCheckAll_Click;
             // 
             // btnGcUncheckAll
             // 
+            btnGcUncheckAll.AutoSize = true;
             btnGcUncheckAll.Location = new Point(370, 8);
             btnGcUncheckAll.Margin = new Padding(0, 8, 8, 8);
             btnGcUncheckAll.Name = "btnGcUncheckAll";
-            btnGcUncheckAll.Size = new Size(78, 25);
+            btnGcUncheckAll.Size = new Size(80, 25);
             btnGcUncheckAll.TabIndex = 5;
-            btnGcUncheckAll.Text = "Uncheck all";
+            btnGcUncheckAll.Text = "Uncheck All";
             btnGcUncheckAll.UseVisualStyleBackColor = true;
             // 
             // btnGcStart
             // 
-            btnGcStart.Location = new Point(456, 8);
+            btnGcStart.AutoSize = true;
+            btnGcStart.Location = new Point(458, 8);
             btnGcStart.Margin = new Padding(0, 8, 8, 8);
             btnGcStart.Name = "btnGcStart";
-            btnGcStart.Size = new Size(96, 25);
+            btnGcStart.Size = new Size(98, 25);
             btnGcStart.TabIndex = 6;
-            btnGcStart.Text = "Start (checked)";
+            btnGcStart.Text = "Start (Checked)";
             btnGcStart.UseVisualStyleBackColor = true;
             // 
             // statusStripGC
@@ -1342,8 +1378,8 @@ namespace SDBuilderWin
             flowLayoutPanel1.Controls.Add(btnSC64Install64DD);
             flowLayoutPanel1.Controls.Add(btnSC64InstallEmulators);
             flowLayoutPanel1.FlowDirection = FlowDirection.TopDown;
-            flowLayoutPanel1.Location = new Point(262, 8);
-            flowLayoutPanel1.Margin = new Padding(8, 0, 0, 0);
+            flowLayoutPanel1.Location = new Point(254, 8);
+            flowLayoutPanel1.Margin = new Padding(0);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Size = new Size(166, 80);
             flowLayoutPanel1.TabIndex = 4;
@@ -1355,6 +1391,7 @@ namespace SDBuilderWin
             btnSC64Install64DD.Size = new Size(160, 34);
             btnSC64Install64DD.TabIndex = 0;
             btnSC64Install64DD.Text = "Install 64DD IPL";
+            btnSC64Install64DD.Click += btnSC64Install64DD_Click;
             // 
             // btnSC64InstallEmulators
             // 
@@ -1367,7 +1404,7 @@ namespace SDBuilderWin
             // lblList4
             // 
             lblList4.AutoSize = true;
-            lblList4.Location = new Point(440, 16);
+            lblList4.Location = new Point(432, 16);
             lblList4.Margin = new Padding(12, 8, 6, 0);
             lblList4.Name = "lblList4";
             lblList4.Size = new Size(28, 15);
@@ -1377,7 +1414,7 @@ namespace SDBuilderWin
             // cmbSC64List
             // 
             cmbSC64List.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSC64List.Location = new Point(477, 11);
+            cmbSC64List.Location = new Point(469, 11);
             cmbSC64List.Name = "cmbSC64List";
             cmbSC64List.Size = new Size(360, 23);
             cmbSC64List.TabIndex = 2;
@@ -1388,7 +1425,7 @@ namespace SDBuilderWin
             scListBtns.Controls.Add(btnSC64RefreshLists);
             scListBtns.Controls.Add(btnSC64OpenLists);
             scListBtns.FlowDirection = FlowDirection.TopDown;
-            scListBtns.Location = new Point(848, 8);
+            scListBtns.Location = new Point(840, 8);
             scListBtns.Margin = new Padding(8, 0, 0, 0);
             scListBtns.Name = "scListBtns";
             scListBtns.Size = new Size(186, 80);
@@ -1413,7 +1450,7 @@ namespace SDBuilderWin
             // btnSC64Start
             // 
             btnSC64Start.Enabled = false;
-            btnSC64Start.Location = new Point(1037, 11);
+            btnSC64Start.Location = new Point(1029, 11);
             btnSC64Start.Name = "btnSC64Start";
             btnSC64Start.Size = new Size(100, 34);
             btnSC64Start.TabIndex = 4;
@@ -1423,7 +1460,7 @@ namespace SDBuilderWin
             // 
             scExtras.AutoSize = true;
             scExtras.FlowDirection = FlowDirection.TopDown;
-            scExtras.Location = new Point(1148, 8);
+            scExtras.Location = new Point(1140, 8);
             scExtras.Margin = new Padding(8, 0, 0, 0);
             scExtras.Name = "scExtras";
             scExtras.Size = new Size(0, 0);
@@ -1433,11 +1470,174 @@ namespace SDBuilderWin
             // scFill
             // 
             scFill.AutoScroll = true;
+            scFill.Controls.Add(statusStripSC);
+            scFill.Controls.Add(lvScList);
+            scFill.Controls.Add(scTop);
             scFill.Dock = DockStyle.Fill;
             scFill.Location = new Point(3, 105);
             scFill.Name = "scFill";
             scFill.Size = new Size(1155, 244);
             scFill.TabIndex = 1;
+            // 
+            // statusStripSC
+            // 
+            statusStripSC.Items.AddRange(new ToolStripItem[] { lblStatusSC, lblSepSC1, lblSpacerSC, lblCountSC, lblSepSC2, lblSizeSC });
+            statusStripSC.Location = new Point(0, 222);
+            statusStripSC.Name = "statusStripSC";
+            statusStripSC.Size = new Size(1155, 22);
+            statusStripSC.TabIndex = 3;
+            // 
+            // lblStatusSC
+            // 
+            lblStatusSC.Name = "lblStatusSC";
+            lblStatusSC.Size = new Size(42, 17);
+            lblStatusSC.Text = "Ready.";
+            // 
+            // lblSepSC1
+            // 
+            lblSepSC1.Name = "lblSepSC1";
+            lblSepSC1.Size = new Size(16, 17);
+            lblSepSC1.Text = " | ";
+            // 
+            // lblSpacerSC
+            // 
+            lblSpacerSC.Name = "lblSpacerSC";
+            lblSpacerSC.Size = new Size(958, 17);
+            lblSpacerSC.Spring = true;
+            // 
+            // lblCountSC
+            // 
+            lblCountSC.Name = "lblCountSC";
+            lblCountSC.Size = new Size(65, 17);
+            lblCountSC.Text = "Checked: 0";
+            // 
+            // lblSepSC2
+            // 
+            lblSepSC2.Name = "lblSepSC2";
+            lblSepSC2.Size = new Size(10, 17);
+            lblSepSC2.Text = "|";
+            // 
+            // lblSizeSC
+            // 
+            lblSizeSC.Name = "lblSizeSC";
+            lblSizeSC.Size = new Size(49, 17);
+            lblSizeSC.Text = "Size: 0 B";
+            // 
+            // lvScList
+            // 
+            lvScList.CheckBoxes = true;
+            lvScList.Columns.AddRange(new ColumnHeader[] { colPathSC, colStatusSC });
+            lvScList.Dock = DockStyle.Fill;
+            lvScList.FullRowSelect = true;
+            lvScList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lvScList.Location = new Point(0, 41);
+            lvScList.Name = "lvScList";
+            lvScList.Size = new Size(1155, 203);
+            lvScList.TabIndex = 2;
+            lvScList.UseCompatibleStateImageBehavior = false;
+            lvScList.View = View.Details;
+            // 
+            // colPathSC
+            // 
+            colPathSC.Text = "Path";
+            colPathSC.Width = 500;
+            // 
+            // colStatusSC
+            // 
+            colStatusSC.Text = "Status";
+            colStatusSC.Width = 160;
+            // 
+            // scTop
+            // 
+            scTop.AutoSize = true;
+            scTop.Controls.Add(lblScMode);
+            scTop.Controls.Add(rbScFiles);
+            scTop.Controls.Add(rbScDirs);
+            scTop.Controls.Add(btnScChoose);
+            scTop.Controls.Add(btnScCheckAll);
+            scTop.Controls.Add(btnScUncheckAll);
+            scTop.Controls.Add(btnScStart);
+            scTop.Dock = DockStyle.Top;
+            scTop.Location = new Point(0, 0);
+            scTop.Margin = new Padding(10);
+            scTop.Name = "scTop";
+            scTop.Size = new Size(1155, 41);
+            scTop.TabIndex = 1;
+            scTop.WrapContents = false;
+            // 
+            // lblScMode
+            // 
+            lblScMode.AutoSize = true;
+            lblScMode.Location = new Point(6, 13);
+            lblScMode.Margin = new Padding(6, 13, 8, 0);
+            lblScMode.Name = "lblScMode";
+            lblScMode.Size = new Size(41, 15);
+            lblScMode.TabIndex = 0;
+            lblScMode.Text = "Mode:";
+            // 
+            // rbScFiles
+            // 
+            rbScFiles.AutoSize = true;
+            rbScFiles.Checked = true;
+            rbScFiles.Location = new Point(55, 11);
+            rbScFiles.Margin = new Padding(0, 11, 8, 0);
+            rbScFiles.Name = "rbScFiles";
+            rbScFiles.Size = new Size(48, 19);
+            rbScFiles.TabIndex = 1;
+            rbScFiles.TabStop = true;
+            rbScFiles.Text = "Files";
+            rbScFiles.UseVisualStyleBackColor = true;
+            // 
+            // rbScDirs
+            // 
+            rbScDirs.AutoSize = true;
+            rbScDirs.Location = new Point(111, 11);
+            rbScDirs.Margin = new Padding(0, 11, 12, 0);
+            rbScDirs.Name = "rbScDirs";
+            rbScDirs.Size = new Size(81, 19);
+            rbScDirs.TabIndex = 2;
+            rbScDirs.Text = "Directories";
+            rbScDirs.UseVisualStyleBackColor = true;
+            // 
+            // btnScChoose
+            // 
+            btnScChoose.AutoSize = true;
+            btnScChoose.Location = new Point(204, 8);
+            btnScChoose.Margin = new Padding(0, 8, 8, 8);
+            btnScChoose.Name = "btnScChoose";
+            btnScChoose.Size = new Size(75, 25);
+            btnScChoose.TabIndex = 3;
+            btnScChoose.Text = "Choose…";
+            // 
+            // btnScCheckAll
+            // 
+            btnScCheckAll.AutoSize = true;
+            btnScCheckAll.Location = new Point(287, 8);
+            btnScCheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnScCheckAll.Name = "btnScCheckAll";
+            btnScCheckAll.Size = new Size(75, 25);
+            btnScCheckAll.TabIndex = 4;
+            btnScCheckAll.Text = "Check All";
+            // 
+            // btnScUncheckAll
+            // 
+            btnScUncheckAll.AutoSize = true;
+            btnScUncheckAll.Location = new Point(370, 8);
+            btnScUncheckAll.Margin = new Padding(0, 8, 8, 8);
+            btnScUncheckAll.Name = "btnScUncheckAll";
+            btnScUncheckAll.Size = new Size(80, 25);
+            btnScUncheckAll.TabIndex = 5;
+            btnScUncheckAll.Text = "Uncheck All";
+            // 
+            // btnScStart
+            // 
+            btnScStart.AutoSize = true;
+            btnScStart.Location = new Point(458, 8);
+            btnScStart.Margin = new Padding(0, 8, 8, 8);
+            btnScStart.Name = "btnScStart";
+            btnScStart.Size = new Size(98, 25);
+            btnScStart.TabIndex = 6;
+            btnScStart.Text = "Start (Checked)";
             // 
             // tabListmaker
             // 
@@ -1481,6 +1681,7 @@ namespace SDBuilderWin
             lmTop2.Controls.Add(lblMode);
             lmTop2.Controls.Add(rbFiles);
             lmTop2.Controls.Add(rbDirs);
+            lmTop2.Controls.Add(rbMixed);
             lmTop2.Dock = DockStyle.Top;
             lmTop2.Location = new Point(0, 47);
             lmTop2.Name = "lmTop2";
@@ -1503,14 +1704,14 @@ namespace SDBuilderWin
             rbFiles.Checked = true;
             rbFiles.Location = new Point(62, 11);
             rbFiles.Name = "rbFiles";
-            rbFiles.Size = new Size(104, 24);
+            rbFiles.Size = new Size(75, 24);
             rbFiles.TabIndex = 1;
             rbFiles.TabStop = true;
             rbFiles.Text = "Files";
             // 
             // rbDirs
             // 
-            rbDirs.Location = new Point(172, 11);
+            rbDirs.Location = new Point(143, 11);
             rbDirs.Name = "rbDirs";
             rbDirs.Size = new Size(104, 24);
             rbDirs.TabIndex = 2;
@@ -1938,6 +2139,12 @@ namespace SDBuilderWin
             scRow.PerformLayout();
             flowLayoutPanel1.ResumeLayout(false);
             scListBtns.ResumeLayout(false);
+            scFill.ResumeLayout(false);
+            scFill.PerformLayout();
+            statusStripSC.ResumeLayout(false);
+            statusStripSC.PerformLayout();
+            scTop.ResumeLayout(false);
+            scTop.PerformLayout();
             tabListmaker.ResumeLayout(false);
             tabListmaker.PerformLayout();
             lmTop2.ResumeLayout(false);
@@ -2016,6 +2223,25 @@ namespace SDBuilderWin
 
         // Xstation status bar
         private System.Windows.Forms.StatusStrip statusStripXS;
+
+private System.Windows.Forms.StatusStrip statusStripSC;
+private System.Windows.Forms.ToolStripStatusLabel lblStatusSC;
+private System.Windows.Forms.ToolStripStatusLabel lblSepSC1;
+private System.Windows.Forms.ToolStripStatusLabel lblSpacerSC;
+private System.Windows.Forms.ToolStripStatusLabel lblCountSC;
+private System.Windows.Forms.ToolStripStatusLabel lblSepSC2;
+private System.Windows.Forms.ToolStripStatusLabel lblSizeSC;
+private System.Windows.Forms.ListView lvScList;
+private System.Windows.Forms.ColumnHeader colPathSC;
+private System.Windows.Forms.ColumnHeader colStatusSC;
+private System.Windows.Forms.Button btnScChoose;
+private System.Windows.Forms.Button btnScCheckAll;
+private System.Windows.Forms.Button btnScUncheckAll;
+private System.Windows.Forms.Button btnScStart;
+private System.Windows.Forms.Label lblScMode;
+private System.Windows.Forms.RadioButton rbScFiles;
+private System.Windows.Forms.RadioButton rbScDirs;
+private System.Windows.Forms.FlowLayoutPanel scTop;
         private System.Windows.Forms.ToolStripStatusLabel lblStatusXS;
         private System.Windows.Forms.ToolStripStatusLabel lblSepXS1;
         private System.Windows.Forms.ToolStripStatusLabel lblSpacerXS;
