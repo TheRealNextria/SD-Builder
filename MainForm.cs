@@ -18,13 +18,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
+// ===== START AUTO-FIX =====
 #nullable enable
 
 namespace SDBuilderWin
 {
     public sealed partial class MainForm : Form
     {
-
         // Clears search, imported .txt items, and checked state, then rebuilds from the chosen folder
         private void ClearListmakerData()
         {
@@ -53,17 +53,33 @@ namespace SDBuilderWin
         const int XsStatusColWidth = 160;
         const int GcStatusColWidth = 160;
         string _xsFolder = string.Empty;
+        HashSet<string> _sarooChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool _xsBulkChange = false;
+        HashSet<string> _xsChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        System.Windows.Forms.Timer? _xsFilterDebounce;
         // Saroo state
         string _srFolder = string.Empty;
         bool _srBulkChange = false;
+        HashSet<string> _srChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        System.Windows.Forms.Timer? _srFilterDebounce;
         CancellationTokenSource? _srScanCts;
         CancellationTokenSource? _xsScanCts;
+        // Dreamcast state
+        string _dcFolder = string.Empty;
+        bool _dcBulkChange = false;
+        HashSet<string> _dcChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        System.Windows.Forms.Timer? _dcFilterDebounce;
+        CancellationTokenSource? _dcScanCts;
+
         // Gamecube state
         string _gcFolder = string.Empty;
         bool _gcBulkChange = false;
+        HashSet<string> _gcChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        System.Windows.Forms.Timer? _gcFilterDebounce;
         string _scFolder = string.Empty;
         bool _scBulkChange = false;
+        HashSet<string> _scChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        System.Windows.Forms.Timer? _scFilterDebounce;
 
         CancellationTokenSource? _gcScanCts;
         System.Windows.Forms.Timer? _glPoll;
@@ -139,13 +155,43 @@ namespace SDBuilderWin
         System.Windows.Forms.Timer? _lmDebounce;
         System.Windows.Forms.Timer? _lmFilterDebounce;
         bool _lmBulkChange;
-        enum Platform { Xstation, Saroo, Gamecube, Summercart64 }
+        enum Platform { Xstation, Saroo, Gamecube, Summercart64, Dreamcast }
         enum ReplaceDecision { Yes, No, Cancel }
 
 
         public MainForm()
         {
             InitializeComponent();
+            try
+            {
+                if (btnDcBuildTrack05 != null)
+                {
+                    btnDcBuildTrack05.Click += async (_, __) =>
+                    {
+                        await WithDriveJobAsync(async (d, token) =>
+                        {
+                            var sdRoot = $@"{d}:\";
+                            var fmt = DetectDreamcastMenuFormatFromSerialTxt(sdRoot);
+                            Info($"Starting menu build: {fmt} → {sdRoot}01");
+                            await System.Threading.Tasks.Task.CompletedTask;
+                        });
+                    };
+                }
+            }
+            catch (System.Exception ex) { Warn("Exception suppressed (Rebuild Menu wire): " + ex.Message); }
+
+            lvXsList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvSrList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvGcList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvScList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvDcList.HeaderStyle = ColumnHeaderStyle.Clickable;
+            lvXsList.ColumnClick += OnListViewColumnClick;
+            lvSrList.ColumnClick += OnListViewColumnClick;
+            lvGcList.ColumnClick += OnListViewColumnClick;
+            lvScList.ColumnClick += OnListViewColumnClick;
+            lvList.ColumnClick += OnListViewColumnClick;
+            lvDcList.ColumnClick += OnListViewColumnClick;
 
             // Wire Xstation controls
             WireXstationListmaker();
@@ -155,6 +201,79 @@ namespace SDBuilderWin
 
             // Wire Gamecube controls (listmaker)
             WireGamecubeListmaker();
+
+            // Wire Dreamcast controls (listmaker)
+            WireDreamcastListmaker();
+
+            // Gamecube search debounce + wiring
+            _gcFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+            _gcFilterDebounce.Tick += (_, __) => { _gcFilterDebounce!.Stop(); RefreshGamecubeList(); };
+            try
+            {
+                if (txtGcFilter != null)
+                {
+                    txtGcFilter.TextChanged += (_, __) => { _gcFilterDebounce?.Stop(); _gcFilterDebounce?.Start(); };
+                    txtGcFilter.KeyDown += (s, e) =>
+                    {
+                        if (e.KeyCode == Keys.Enter)
+                        {
+                            e.Handled = true;
+                            e.SuppressKeyPress = true;
+                            _gcFilterDebounce?.Stop();
+                            RefreshGamecubeList();
+                        }
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            try
+            {
+                if (btnGcClearFilter != null && txtGcFilter != null)
+                {
+                    btnGcClearFilter.Click += (_, __) =>
+                    {
+                        txtGcFilter.Text = string.Empty;
+                        _gcFilterDebounce?.Stop();
+                        RefreshGamecubeList();
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
+            // Dreamcast search debounce + wiring
+            _dcFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+            _dcFilterDebounce.Tick += (_, __) => { _dcFilterDebounce!.Stop(); RefreshDreamcastList(); };
+            try
+            {
+                if (txtDcFilter != null)
+                {
+                    txtDcFilter.TextChanged += (_, __) => { _dcFilterDebounce?.Stop(); _dcFilterDebounce?.Start(); };
+                    txtDcFilter.KeyDown += (s, e) =>
+                    {
+                        if (e.KeyCode == Keys.Enter)
+                        {
+                            e.Handled = true;
+                            e.SuppressKeyPress = true;
+                            _dcFilterDebounce?.Stop();
+                            RefreshDreamcastList();
+                        }
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            try
+            {
+                if (btnDcClearFilter != null && txtDcFilter != null)
+                {
+                    btnDcClearFilter.Click += (_, __) =>
+                    {
+                        txtDcFilter.Text = string.Empty;
+                        _dcFilterDebounce?.Stop();
+                        RefreshDreamcastList();
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
 
             // Wire Summercart64 controls (listmaker)
             WireSummercartListmaker();
@@ -242,6 +361,12 @@ namespace SDBuilderWin
             try { btnGamecubeCheats.Click += async (_, __) => await WithDriveJobAsync(InstallGamecubeCheats); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
 
             WirePlatformTab(
+                Platform.Dreamcast,
+                btnDreamcastFw, cmbDreamcastList, btnDreamcastRefreshLists, btnDreamcastOpenLists, btnDreamcastStart,
+                null, null
+            );
+
+            WirePlatformTab(
                 Platform.Summercart64,
                 btnSC64Fw, cmbSC64List, btnSC64RefreshLists, btnSC64OpenLists, btnSC64Start,
                 btnSC64Install64DD, btnSC64InstallEmulators
@@ -249,6 +374,44 @@ namespace SDBuilderWin
 
             // Wire Listmaker tab
             WireListmakerTab();
+
+            // Xstation search debounce + wiring
+            _xsFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+            _xsFilterDebounce.Tick += (_, __) => { _xsFilterDebounce!.Stop(); RefreshXstationList(); };
+            try
+            {
+                if (txtXsFilter != null)
+                {
+                    txtXsFilter.TextChanged += (_, __) => { _xsFilterDebounce?.Stop(); _xsFilterDebounce?.Start(); };
+                    txtXsFilter.KeyDown += (s, e) =>
+                    {
+                        if (e.KeyCode == Keys.Enter)
+                        {
+                            e.Handled = true;
+                            e.SuppressKeyPress = true;
+                            _xsFilterDebounce?.Stop();
+                            RefreshXstationList();
+                        }
+                    };
+
+            try
+            {
+                if (btnXsClearFilter != null && txtXsFilter != null)
+                {
+                    btnXsClearFilter.Click += (_, __) =>
+                    {
+                        txtXsFilter.Text = string.Empty;
+                        _xsFilterDebounce?.Stop();
+                        RefreshXstationList();
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
 
             // Live filter as you type
             txtFilter.TextChanged += (_, __) => { _lmFilterDebounce?.Stop(); _lmFilterDebounce?.Start(); };
@@ -419,12 +582,13 @@ namespace SDBuilderWin
                 }
                 _lmScanCts?.Cancel();
             };
-        }
+}
         void RefreshAllGameLists()
         {
             try { PopulateListCombo(cmbXstationList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
             try { PopulateListCombo(cmbSarooList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
             try { PopulateListCombo(cmbGamecubeList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            try { PopulateListCombo(cmbDreamcastList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
             try { PopulateListCombo(cmbSC64List); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
         }
 
@@ -442,9 +606,7 @@ namespace SDBuilderWin
             }
             catch { return ""; }
         }
-
-
-        // ---------- Layout helpers that depend on Designer controls ----------
+// ---------- Layout helpers that depend on Designer controls ----------
 
         void PositionVersionLabel()
         {
@@ -474,6 +636,22 @@ namespace SDBuilderWin
                     case Platform.Xstation: await EnsureXstationFirmware(d, token); break;
                     case Platform.Saroo: await EnsureSarooFirmware(d, token); break;
                     case Platform.Gamecube: await EnsureGamecubeIPL(d, token); break;
+                    case Platform.Dreamcast:
+{
+    bool useGd = (rbDcGdMenu != null && rbDcGdMenu.Checked);
+    string chosenName = useGd ? "GDmenu" : "OpenMenu";
+    var ans = MessageBox.Show(
+        this,
+        $"Do you want to install {chosenName} firmware to " + d + ":\01?",
+        "Install firmware",
+        MessageBoxButtons.YesNo,
+        MessageBoxIcon.Question
+    );
+    if (ans != DialogResult.Yes) break;
+    await EnsureDreamcastFirmwareSelectedAsync(d, token);
+    break;
+}
+                    
                     case Platform.Summercart64: await EnsureSummercart64Firmware(d, token); break;
                 }
             });
@@ -507,7 +685,7 @@ namespace SDBuilderWin
             if (lvList.Columns.Count == 0)
             {
                 lvList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                lvList.Columns.Add("Status", 100, HorizontalAlignment.Left);
+                lvList.Columns.Add("Size", 100, HorizontalAlignment.Left);
             }
 
             void AutoSizeColumns()
@@ -709,6 +887,7 @@ namespace SDBuilderWin
         void WireXstationListmaker()
         {
             // columns
+            // ===== Xstation UI wiring START =====
             lvXsList.View = View.Details;
             lvXsList.FullRowSelect = true;
             lvXsList.HideSelection = false;
@@ -716,8 +895,9 @@ namespace SDBuilderWin
             {
                 lvXsList.Columns.Clear();
                 lvXsList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                lvXsList.Columns.Add("Status", XsStatusColWidth, HorizontalAlignment.Left);
+                lvXsList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
             }
+            // ===== END Xstation UI wiring =====
 
             void AutoSizeXs()
             {
@@ -744,19 +924,32 @@ namespace SDBuilderWin
             rbXsFiles.CheckedChanged += (_, __) => { if (rbXsFiles.Checked) { SetXsStatus("Mode: Files"); RefreshXstationList(); } };
             rbXsDirs.CheckedChanged += (_, __) => { if (rbXsDirs.Checked) { SetXsStatus("Mode: Directories"); RefreshXstationList(); } };
 
-            lvXsList.ItemChecked += (_, __) => { if (!_xsBulkChange) UpdateXsCounters(); };
+            lvXsList.ItemChecked += (_, __) =>
+            {
+                if (_xsBulkChange) return;
+                try
+                {
+                    if (lvXsList.FocusedItem is ListViewItem it && it != null)
+                    {
+                        var path = it.Text;
+                        if (it.Checked) _xsChecked.Add(path); else _xsChecked.Remove(path);
+                    }
+                }
+                catch { /* ignore */ }
+                UpdateXsCounters();
+            };
 
             btnXsCheckAll.Click += (_, __) =>
             {
                 _xsBulkChange = true;
-                foreach (ListViewItem it in lvXsList.Items) it.Checked = true;
+                foreach (ListViewItem it in lvXsList.Items) { it.Checked = true; _xsChecked.Add(it.Text); }
                 _xsBulkChange = false;
                 UpdateXsCounters();
             };
             btnXsUncheckAll.Click += (_, __) =>
             {
                 _xsBulkChange = true;
-                foreach (ListViewItem it in lvXsList.Items) it.Checked = false;
+                foreach (ListViewItem it in lvXsList.Items) { it.Checked = false; _xsChecked.Remove(it.Text); }
                 _xsBulkChange = false;
                 UpdateXsCounters();
             };
@@ -766,12 +959,768 @@ namespace SDBuilderWin
             };
 
         }
+// ===== Dreamcast Firmware ensure START =====
+async Task EnsureDreamcastFirmwareSelectedAsync(string destDrive, CancellationToken token)
+{
+    try
+    {
+        string appDir = AppContext.BaseDirectory;
+        string toolsDir = Path.Combine(appDir, "Tools");
+        bool useGd = rbDcGdMenu != null && rbDcGdMenu.Checked;
+        string zipName = useGd ? "GDmenu.zip" : "OpenMenu.zip";
+        string chosenName = useGd ? "GDmenu" : "OpenMenu";
+        string chosenZip = Path.Combine(toolsDir, zipName);
+
+        if (!Directory.Exists(toolsDir) || !File.Exists(chosenZip))
+        {
+            Error($"'{zipName}' not found in Tools folder next to the EXE.");
+            return;
+        }
+
+        string tempDir = Path.Combine(appDir, "temp_dreamcast_fw");
+        try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+        Directory.CreateDirectory(tempDir);
+
+        Info($"Extracting {chosenName}...");
+        try { System.IO.Compression.ZipFile.ExtractToDirectory(chosenZip, tempDir); }
+        catch (Exception ex) { Error("Failed to extract ZIP: " + ex.Message); return; }
+
+        // Detect payload folder (supports both GDmenu and OpenMenu zips)
+        string? payload = null;
+        foreach (var name in new[] { "01", "menu_gdi", "menu_data" })
+        {
+            var path = Path.Combine(tempDir, name);
+            if (Directory.Exists(path)) { payload = path; break; }
+        }
+        if (payload == null)
+        {
+            var dirs = Directory.GetDirectories(tempDir);
+            if (dirs.Length == 1) payload = dirs[0];
+        }
+        if (payload == null) payload = tempDir;
+
+        var destRoot = $@"{destDrive}:\\";
+        var dest01 = Path.Combine(destRoot, "01");
+
+        if (Directory.Exists(dest01))
+        {
+            var overwriteAns = MessageBox.Show(
+                this,
+                $"Folder '01' already exists on {destDrive}:. Overwrite its contents?",
+                "Overwrite confirmation",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning
+            );
+            if (overwriteAns == DialogResult.No) return;
+        }
+
+        Info($"Installing {chosenName} to \\01 ...");
+        try
+        {
+            if (Directory.Exists(dest01))
+            {
+                try { Directory.Delete(dest01, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            }
+            Directory.CreateDirectory(dest01);
+
+            foreach (var dir in Directory.GetDirectories(payload, "*", SearchOption.TopDirectoryOnly))
+                await RoboCopyDir(dir, dest01, token);
+            foreach (var file in Directory.GetFiles(payload, "*", SearchOption.TopDirectoryOnly))
+                await RoboCopyFile(file, dest01, token);
+
+            Info($"{chosenName} installed to {destDrive}:\\01");
+
+            // Ensure GDEMU.ini exists in SD root after GDmenu install
+            try
+            {
+                if (string.Equals(chosenName, "GDmenu", StringComparison.OrdinalIgnoreCase))
+                {
+                    var sdRoot = $@"{destDrive}:\\";
+                    var gdemuIniPath = System.IO.Path.Combine(sdRoot, "GDEMU.ini");
+                    if (!System.IO.File.Exists(gdemuIniPath))
+                    {
+                        System.IO.File.WriteAllLines(gdemuIniPath, new[]
+                        {
+                            "open_time = 150",
+                            "detect_time = 150",
+                            "reset_goto = 1"
+                        });
+                        Info("Created default GDEMU.ini in SD root");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Warn("Failed to ensure GDEMU.ini: " + ex.Message);
+            }
+
+            SetDcStatus("Ready.");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { Error("Dreamcast install failed: " + ex.Message); }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+        }
+    }
+    catch (Exception ex) { Error("Dreamcast firmware error: " + ex.Message); }
+}// ===== END Dreamcast Firmware ensure =====
 
 
-        void RefreshXstationList()
+
+
+        // ------------------- Dreamcast helpers -------------------
+        void SetDcStatus(string text)
+        {
+            try { lblStatusDC.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+        }
+
+        void WireDreamcastListmaker()
+        {
+            // columns
+            // ===== Dreamcast UI wiring START =====
+            lvDcList.View = View.Details;
+            lvDcList.FullRowSelect = true;
+            lvDcList.HideSelection = false;
+            if (lvDcList.Columns.Count < 2)
+            {
+                lvDcList.Columns.Clear();
+                lvDcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
+                lvDcList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
+            }
+            
+
+// Guard: block checking of rows marked as Installed (uses DcMeta on ListViewItem.Tag)
+lvDcList.ItemCheck += (_, e) =>
+{
+    try
+    {
+        if (_dcBulkChange) return; // allow programmatic changes
+        var it = lvDcList.Items[e.Index];
+        if (it?.Tag is DcMeta m && m.Installed)
+        {
+            e.NewValue = CheckState.Unchecked;
+        }
+    }
+    catch { /* ignore */ }
+};
+// ===== END Dreamcast UI wiring =====
+
+            void AutoSizeDc()
+            {
+                if (lvDcList.Columns.Count >= 2)
+                {
+                    int statusWidth = XsStatusColWidth;
+                    lvDcList.Columns[0].Width = Math.Max(120, lvDcList.ClientSize.Width - statusWidth - 8);
+                    lvDcList.Columns[1].Width = statusWidth;
+                }
+            }
+            lvDcList.Resize += (_, __) => AutoSizeDc();
+            tabDreamcast.Enter += (_, __) => AutoSizeDc();
+
+            btnDcChoose.Click += (_, __) =>
+            {
+                using var dlg = new FolderBrowserDialog { ShowNewFolderButton = false };
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    _dcFolder = dlg.SelectedPath;
+                    SetDcStatus($"Selected: {_dcFolder}");
+                    RefreshDreamcastList();
+                }
+            };
+            rbDcFiles.CheckedChanged += (_, __) => { if (rbDcFiles.Checked) { SetDcStatus("Mode: Files"); RefreshDreamcastList(); } };
+            rbDcDirs.CheckedChanged += (_, __) => { if (rbDcDirs.Checked) { SetDcStatus("Mode: Directories"); RefreshDreamcastList(); } };
+
+            lvDcList.ItemChecked += (_, __) =>
+            {
+                if (_dcBulkChange) return;
+                try
+                {
+                    if (lvDcList.FocusedItem is ListViewItem it && it != null)
+                    {
+                        var path = it.Text;
+                        if (it.Checked) _dcChecked.Add(path); else _dcChecked.Remove(path);
+                    }
+                }
+                catch { /* ignore */ }
+                UpdateDcCounters();
+            };
+
+            btnDcCheckAll.Click += (_, __) =>
+            {
+                _dcBulkChange = true;
+                
+foreach (ListViewItem it in lvDcList.Items)
+{
+    if (!DcIsInstalled(it))
+    {
+        it.Checked = true;
+        _dcChecked.Add(it.Text);
+    }
+    else
+    {
+        it.Checked = false;
+        _dcChecked.Remove(it.Text);
+    }
+}
+
+                _dcBulkChange = false;
+                UpdateDcCounters();
+            };
+            btnDcUncheckAll.Click += (_, __) =>
+            {
+                _dcBulkChange = true;
+                foreach (ListViewItem it in lvDcList.Items) { it.Checked = false; _dcChecked.Remove(it.Text); }
+                _dcBulkChange = false;
+                UpdateDcCounters();
+            };
+            btnDcStart.Click += async (_, __) =>
+            {
+            await WithDriveJobAsync((d, token) => CopyDreamcastCheckedAsync(d, token));
+            try { BeginInvoke(new Action(() => RefreshDreamcastList())); } catch { }
+        };
+        }
+
+        
+void UpdateDcCounters()
+{
+        long total = 0;
+    int count = 0;
+    foreach (ListViewItem it in lvDcList.Items)
+    {
+        if (!it.Checked) continue;
+        count++;
+
+        if (it.Tag is DcMeta md)       total += md.Size;
+        else if (it.Tag is long sz)     total += sz; // legacy fallback
+    }
+    try
+    {
+        lblCountDC.Text = $"Checked: {count}";
+        lblSizeDC.Text  = $"Size: {FormatSize(total)}";
+    }
+    catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+    
+}
+
+
+        async Task RecalcDcAsync()
         {
             try
             {
+                _dcScanCts?.Cancel();
+                _dcScanCts = new CancellationTokenSource();
+
+// Build index of installed Dreamcast serials on the selected drive (if any)
+var dcDrive = CurrentDriveLetter();
+
+// Cache to derive serials for non-.gdi files by inspecting sibling .gdi in the same folder
+var dcDirSerialCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(System.StringComparer.OrdinalIgnoreCase);
+
+var dcExistingSerials = (dcDrive != null)
+    ? IndexDcSerials($@"{dcDrive}:")
+    : new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+
+                var ct = _dcScanCts.Token;
+
+                await Task.Run(() =>
+                {
+                    foreach (ListViewItem it in lvDcList.Items)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        var path = it.Text;
+
+
+bool isInstalled = false;
+try
+{
+    // 1) Try direct serial extraction from this path (works well for .gdi)
+    if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
+    {
+        isInstalled = dcExistingSerials.ContainsKey(srcSerial);
+    }
+    else
+    {
+        // 2) Fallback: look for a sibling .gdi in the same folder and use that serial
+        var dir = Path.GetDirectoryName(path) ?? string.Empty;
+        if (!string.IsNullOrEmpty(dir))
+        {
+            if (!dcDirSerialCache.TryGetValue(dir, out var dirSerial) || string.IsNullOrWhiteSpace(dirSerial))
+            {
+                try
+                {
+                    var gdi = System.Linq.Enumerable.FirstOrDefault(Directory.EnumerateFiles(dir, "*.gdi"));
+                    if (!string.IsNullOrEmpty(gdi) && TryExtractDcSerialFromSource(gdi, out var gdiSerial) && !string.IsNullOrWhiteSpace(gdiSerial))
+                    {
+                        dirSerial = gdiSerial;
+                    }
+                    dcDirSerialCache[dir] = dirSerial;
+                }
+                catch
+                {
+                    // ignore directory access errors
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(dirSerial))
+            {
+                isInstalled = dcExistingSerials.ContainsKey(dirSerial);
+            }
+        }
+    }
+}
+catch { /* ignore */ }
+
+
+                        long size = 0;
+                        try
+                        {
+                            if (File.Exists(path))
+                            {
+                                size = new FileInfo(path).Length;
+                            }
+                            else if (Directory.Exists(path))
+                            {
+                                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                                {
+                                    if (ct.IsCancellationRequested) break;
+                                    try { size += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                                }
+                            }
+                            var sizeStr = FormatSize(size);
+                            
+BeginInvoke(new Action(() =>
+{
+    if (isInstalled)
+    {
+        if (it.SubItems.Count < 2) it.SubItems.Add("Installed");
+        else it.SubItems[1].Text = "Installed";
+        try
+        {
+            it.ForeColor = SystemColors.GrayText;
+            it.Font = new Font(it.Font, FontStyle.Italic);
+        }
+        catch { /* ignore styling issues */ }
+        it.Tag = new DcMeta { Installed = true, Size = size }; it.Checked = false;
+        _dcChecked.Remove(it.Text);
+    }
+    else
+    {
+        if (it.SubItems.Count < 2) it.SubItems.Add(sizeStr);
+        else it.SubItems[1].Text = sizeStr;
+        it.Tag = new DcMeta { Installed = false, Size = size };
+        if (it.Checked) UpdateDcCounters();
+    }
+}));
+
+                        }
+                        catch
+                        {
+                            BeginInvoke(new Action(() =>
+                            {
+                                if (it.SubItems.Count < 2) it.SubItems.Add("error");
+                                else it.SubItems[1].Text = "error";
+                            }));
+                        }
+                    }
+                }, ct);
+
+                BeginInvoke(new Action(() => SetDcStatus($"Ready. {lvDcList.Items.Count} items.")));
+            }
+            catch { /* cancelled */ }
+        }
+
+        void RefreshDreamcastList()
+        {
+            try
+            {
+                var dcFilterText = (txtDcFilter?.Text ?? "*").Trim();
+                var dcPatterns = dcFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                             .Select(s => s.Trim())
+                                             .ToArray();
+                if (dcPatterns.Length == 0) dcPatterns = new[] { "*" };
+                dcPatterns = dcPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
+                lvDcList.BeginUpdate();
+                lvDcList.Items.Clear();
+                if (!Directory.Exists(_dcFolder)) { SetDcStatus("Ready."); lvDcList.EndUpdate(); return; }
+
+                SetDcStatus("Scanning...");
+                if (lvDcList.Columns.Count < 2)
+                {
+                    lvDcList.Columns.Clear();
+                    lvDcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
+                    lvDcList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
+                }
+
+                if (rbDcFiles.Checked)
+                {
+                    foreach (var f in Directory.EnumerateFiles(_dcFolder, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        var name = System.IO.Path.GetFileName(f);
+                        if (!MatchesAnyPattern(name, dcPatterns) && !MatchesAnyPattern(f, dcPatterns)) continue;
+                        var it = new ListViewItem(f);
+                        it.SubItems.Add("scanning...");
+                        it.Tag = (long?)null;
+                        it.Checked = _dcChecked.Contains(f);
+                        lvDcList.Items.Add(it);
+                    }
+                }
+                else
+                {
+                    foreach (var d in Directory.EnumerateDirectories(_dcFolder, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        var name = System.IO.Path.GetFileName(d);
+                        if (!MatchesAnyPattern(name, dcPatterns) && !MatchesAnyPattern(d, dcPatterns)) continue;
+                        var it = new ListViewItem(d);
+                        it.SubItems.Add("scanning...");
+                        it.Tag = (long?)null;
+                        it.Checked = _dcChecked.Contains(d);
+                        lvDcList.Items.Add(it);
+                    }
+                }
+                UpdateDcCounters();
+                _ = RecalcDcAsync();
+            }
+            catch (Exception ex)
+            {
+                Error("Dreamcast list error: " + ex.Message);
+            }
+            finally { try { lvDcList.EndUpdate(); } catch { } }
+        }
+// Dreamcast index helpers
+
+static bool TryExtractDcIpMetadataFromGdi(string gdiPath, out string? title, out string? serial)
+{
+    title = null; serial = null;
+    try
+    {
+        if (!System.IO.File.Exists(gdiPath)) return false;
+        var folder = System.IO.Path.GetDirectoryName(gdiPath);
+        if (string.IsNullOrEmpty(folder)) return false;
+
+        string? dataTrackPath = null;
+        int sectorSize = 2352; // default
+
+        foreach (var raw in System.IO.File.ReadAllLines(gdiPath))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || !char.IsDigit(line[0])) continue;
+            var parts = line.Split(System.Array.Empty<char>(), System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 5 && int.TryParse(parts[2], out var tt) && int.TryParse(parts[3], out var ss))
+            {
+                if (tt == 4)
+                {
+                    var maybe = System.IO.Path.Combine(folder, parts[4]);
+                    if (System.IO.File.Exists(maybe))
+                    {
+                        dataTrackPath = maybe; sectorSize = ss; break;
+                    }
+                }
+            }
+        }
+        if (dataTrackPath == null)
+        {
+            var fallback = System.IO.Path.Combine(folder, "track03.bin");
+            if (System.IO.File.Exists(fallback)) { dataTrackPath = fallback; sectorSize = 2352; }
+        }
+        if (dataTrackPath == null) return false;
+
+        var ip = ReadIpBinFromTrack(dataTrackPath, sectorSize);
+        if (ip == null || ip.Length < 0x200) return false;
+
+        serial = ExtractAscii(ip, 0x40, 10)?.Trim();
+        title  = ExtractAscii(ip, 0x80, 0x80)?.Trim();
+        return !(string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(serial));
+    }
+    catch { return false; }
+}
+
+// Determine serial from a folder containing a .gdi or a single .gdi file (CDI skipped)
+static bool TryExtractDcSerialFromSource(string source, out string? serial)
+{
+    serial = null;
+    try
+    {
+        if (System.IO.Directory.Exists(source))
+        {
+            // Look for .gdi in the folder and read IP.BIN
+            var gdi = System.IO.Directory.EnumerateFiles(source, "*.gdi", System.IO.SearchOption.TopDirectoryOnly).FirstOrDefault();
+            if (gdi != null && TryExtractDcIpMetadataFromGdi(gdi, out var _, out var sn))
+            {
+                if (!string.IsNullOrWhiteSpace(sn)) { serial = sn.ToUpperInvariant(); return true; }
+            }
+            return false;
+        }
+        if (System.IO.File.Exists(source))
+        {
+            var ext = System.IO.Path.GetExtension(source).ToLowerInvariant();
+            if (ext == ".gdi")
+            {
+                if (TryExtractDcIpMetadataFromGdi(source, out var _, out var sn))
+                {
+                    if (!string.IsNullOrWhiteSpace(sn)) { serial = sn.ToUpperInvariant(); return true; }
+                }
+            }
+        }
+        return false;
+    }
+    catch { return false; }
+}
+
+// Build a map of existing serials on the SD: serial -> index folder (02..9999). 01 is reserved.
+static System.Collections.Generic.Dictionary<string,string> IndexDcSerials(string destRoot)
+{
+    var map = new System.Collections.Generic.Dictionary<string,string>(System.StringComparer.OrdinalIgnoreCase);
+    try
+    {
+        if (!System.IO.Directory.Exists(destRoot)) return map;
+        for (int i = 2; i <= 9999; i++)
+        {
+            var idx = (i < 100) ? i.ToString("00") : (i < 1000) ? i.ToString("000") : i.ToString("0000");
+            var dir = System.IO.Path.Combine(destRoot, idx);
+            if (!System.IO.Directory.Exists(dir)) continue;
+            var p = System.IO.Path.Combine(dir, "serial.txt");
+            if (!System.IO.File.Exists(p)) continue;
+            var s = System.IO.File.ReadAllText(p).Trim();
+            if (string.IsNullOrWhiteSpace(s)) continue;
+            s = s.ToUpperInvariant();
+            if (!map.ContainsKey(s)) map[s] = idx;
+        }
+    }
+    catch { /* ignore */ }
+    return map;
+}
+
+
+static string PadDcIndex(int n)
+{
+    if (n < 100) return n.ToString("00");
+    if (n < 1000) return n.ToString("000");
+    return n.ToString("0000");
+}
+
+static string NextDreamcastIndexFolder(string root)
+{
+    var used = new HashSet<int>();
+    try
+    {
+        foreach (var dir in Directory.EnumerateDirectories(root))
+        {
+            var name = Path.GetFileName(dir);
+            if (int.TryParse(name, out int num) && num >= 1 && num <= 9999)
+                used.Add(num);
+        }
+    }
+    catch { /* ignore */ }
+
+    for (int i = 2; i <= 9999; i++)
+        if (!used.Contains(i))
+            return Path.Combine(root, PadDcIndex(i));
+
+    throw new InvalidOperationException("No free Dreamcast index folder (01..9999).");
+}
+
+
+        
+// --- Helper: sanitize Dreamcast menu title for both infoNN.txt and name.txt ---
+private static string SanitizeMenuTitle32(string? s)
+{
+    s ??= string.Empty;
+    // Remove diacritics
+    string n = s.Normalize(System.Text.NormalizationForm.FormD);
+    var sb = new System.Text.StringBuilder(n.Length);
+    for (int i = 0; i < n.Length; i++)
+    {
+        var ch = n[i];
+        var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
+        if (cat != System.Globalization.UnicodeCategory.NonSpacingMark) sb.Append(ch);
+    }
+    string noDiac = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+
+    // Keep only A–Z a–z 0–9 space underscore dash; collapse spaces
+    var outSb = new System.Text.StringBuilder(noDiac.Length);
+    bool lastSpace = false;
+    for (int i = 0; i < noDiac.Length; i++)
+    {
+        char ch = noDiac[i];
+        bool ok = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == ' ';
+        if (!ok) ch = ' ';
+        if (ch == ' ')
+        {
+            if (lastSpace) continue;
+            lastSpace = true;
+            outSb.Append(' ');
+        }
+        else
+        {
+            lastSpace = false;
+            outSb.Append(ch);
+        }
+    }
+    string clean = outSb.ToString().Trim();
+    if (string.IsNullOrWhiteSpace(clean)) clean = "UNKNOWN";
+
+    // Word-safe 32-char trim
+    const int Max = 32;
+    if (clean.Length > Max)
+    {
+        int cut = clean.LastIndexOf(' ', Max);
+        clean = (cut > 0) ? clean.Substring(0, cut) : clean.Substring(0, Max);
+    }
+    return clean;
+}
+
+// ===== Dreamcast Copy routine START =====
+        async Task CopyDreamcastCheckedAsync(string destDrive, CancellationToken token)
+{
+    var destRoot = $@"{destDrive}:\";
+    var existingSerials = IndexDcSerials(destRoot);
+    Directory.CreateDirectory(destRoot);
+
+        // Build sources: group by parent folder in Files mode so one game = one index
+    var sources = new System.Collections.Generic.List<string>();
+    if (rbDcFiles.Checked)
+    {
+        var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (ListViewItem it in lvDcList.Items)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!it.Checked) continue;
+            var pth = it.Text;
+            string dir = System.IO.Directory.Exists(pth) ? pth : (System.IO.Path.GetDirectoryName(pth) ?? pth);
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            if (seen.Add(dir)) sources.Add(dir);
+        }
+    }
+    else
+    {
+        foreach (ListViewItem it in lvDcList.Items)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!it.Checked) continue;
+            sources.Add(it.Text);
+        }
+    }
+
+    foreach (var path in sources)
+    {
+
+        try { if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial)) { if (existingSerials.TryGetValue(srcSerial, out var idx)) { Info(string.Format("[SKIP] Already present as \\{0} (serial {1})", idx, srcSerial)); WaitEnterOrTimeout(CopyTimeout, token);
+        if (token.IsCancellationRequested) return;
+        continue; } } } catch { /* ignore */ }
+        var dcDest = NextDreamcastIndexFolder(destRoot); // always next free 01..9999
+        token.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(dcDest);
+
+        if (Directory.Exists(path))
+        {
+            Info($"Copying Dreamcast folder → '{Path.GetFileName(path)}' → {Path.GetFileName(dcDest)}");
+            await RoboCopyDir(path, dcDest, token);
+
+            // Rename top-level .gdi to disc.gdi
+            try
+            {
+                var gdis = Directory.GetFiles(dcDest, "*.gdi", SearchOption.TopDirectoryOnly);
+                if (gdis.Length > 0)
+                {
+                    var gdiSrc = gdis[0];
+                    var gdiDst = Path.Combine(dcDest, "disc.gdi");
+                    if (!string.Equals(Path.GetFileName(gdiSrc), "disc.gdi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(gdiDst)) File.Delete(gdiDst);
+                        File.Move(gdiSrc, gdiDst);
+                    }
+                }
+            }
+            catch { /* ignore */ }
+        }
+        else if (File.Exists(path))
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var leaf = Path.GetFileName(path);
+            if (ext == ".cdi")
+            {
+                            Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(path, dcDest, token);
+                var srcLeaf = Path.GetFileName(path);
+                var srcPath = Path.Combine(dcDest, srcLeaf);
+                var dstPath = Path.Combine(dcDest, "disc.cdi");
+                try
+                {
+                    if (!string.Equals(srcLeaf, "disc.cdi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(dstPath)) File.Delete(dstPath);
+                        if (File.Exists(srcPath)) File.Move(srcPath, dstPath);
+                    }
+                }
+                catch { /* ignore */ }
+            }
+            else if (ext == ".gdi")
+            {
+                            Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(path, dcDest, token);
+                var srcLeaf = Path.GetFileName(path);
+                var srcPath = Path.Combine(dcDest, srcLeaf);
+                var dstPath = Path.Combine(dcDest, "disc.gdi");
+                try
+                {
+                    if (!string.Equals(srcLeaf, "disc.gdi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(dstPath)) File.Delete(dstPath);
+                        if (File.Exists(srcPath)) File.Move(srcPath, dstPath);
+                    }
+                }
+                catch { /* ignore */ }
+            }
+            else
+            {
+                // Other single files: copy as-is into the index folder
+                            Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(path, dcDest, token);
+            }
+        }
+    
+        try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  } } catch { /* ignore */ }
+        WaitEnterOrTimeout(CopyTimeout, token);
+    }
+
+    Info("Dreamcast copy complete.");
+
+try
+{
+    BeginInvoke(new Action(() => RefreshDreamcastList()));
+}
+catch { /* ignore refresh errors */ }
+
+}        // ===== END Dreamcast Copy routine =====
+
+    
+        // Simple wildcard matcher: * and ? (case-insensitive option)
+        static bool WildcardIsMatch(string input, string pattern, bool ignoreCase = true)
+        {
+            if (string.IsNullOrEmpty(pattern)) return true;
+            string regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace(@"\*", ".*").Replace(@"\?", ".") + "$";
+            var opts = ignoreCase ? System.Text.RegularExpressions.RegexOptions.IgnoreCase : System.Text.RegularExpressions.RegexOptions.None;
+            return System.Text.RegularExpressions.Regex.IsMatch(input ?? string.Empty, regex, opts);
+        }
+        static bool MatchesAnyPattern(string pathOrName, string[] patterns)
+        {
+            if (patterns == null || patterns.Length == 0) return true;
+            foreach (var p in patterns)
+                if (WildcardIsMatch(pathOrName, p, ignoreCase: true))
+                    return true;
+            return false;
+        }
+
+void RefreshXstationList()
+        {
+            try
+            {
+                var xsFilterText = (txtXsFilter?.Text ?? "*").Trim();
+                var xsPatterns = xsFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                             .Select(s => s.Trim())
+                                             .ToArray();
+                if (xsPatterns.Length == 0) xsPatterns = new[] { "*" };
+                xsPatterns = xsPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
                 lvXsList.BeginUpdate();
                 lvXsList.Items.Clear();
                 if (!Directory.Exists(_xsFolder)) { SetXsStatus("Ready."); return; }
@@ -782,17 +1731,23 @@ namespace SDBuilderWin
                 {
                     lvXsList.Columns.Clear();
                     lvXsList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvXsList.Columns.Add("Status", XsStatusColWidth, HorizontalAlignment.Left);
+                    lvXsList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
                 }
 
                 if (rbXsFiles.Checked)
                 {
                     foreach (var f in Directory.EnumerateFiles(_xsFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(f);
+                        if (!MatchesAnyPattern(name, xsPatterns) && !MatchesAnyPattern(f, xsPatterns)) continue;
                         var it = new ListViewItem(f);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
+                        it.Checked = _sarooChecked.Contains(f);
+                        it.Checked = _scChecked.Contains(f);
+                        it.Checked = _gcChecked.Contains(f);
+                        it.Checked = _srChecked.Contains(f);
+                        it.Checked = _xsChecked.Contains(f);
                         lvXsList.Items.Add(it);
                     }
                 }
@@ -800,10 +1755,15 @@ namespace SDBuilderWin
                 {
                     foreach (var d in Directory.EnumerateDirectories(_xsFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(d);
+                        if (!MatchesAnyPattern(name, xsPatterns) && !MatchesAnyPattern(d, xsPatterns)) continue;
                         var it = new ListViewItem(d);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
+                        it.Checked = _scChecked.Contains(d);
+                        it.Checked = _gcChecked.Contains(d);
+                        it.Checked = _srChecked.Contains(d);
+                        it.Checked = _xsChecked.Contains(d);
                         lvXsList.Items.Add(it);
                     }
                 }
@@ -905,7 +1865,7 @@ namespace SDBuilderWin
             {
                 lvSrList.Columns.Clear();
                 lvSrList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                lvSrList.Columns.Add("Status", XsStatusColWidth, HorizontalAlignment.Left);
+                lvSrList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
             }
 
             void AutoSizeSr()
@@ -920,6 +1880,44 @@ namespace SDBuilderWin
             lvSrList.Resize += (_, __) => AutoSizeSr();
             tabSaroo.Enter += (_, __) => AutoSizeSr();
 
+            // Saroo search debounce + wiring
+            _srFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+            _srFilterDebounce.Tick += (_, __) => { _srFilterDebounce!.Stop(); RefreshSarooList(); };
+            try
+            {
+                if (txtSarooFilter != null)
+                {
+                    txtSarooFilter.TextChanged += (_, __) => { _srFilterDebounce?.Stop(); _srFilterDebounce?.Start(); };
+                    txtSarooFilter.KeyDown += (s, e) =>
+                    {
+                        if (e.KeyCode == Keys.Enter)
+                        {
+                            e.Handled = true;
+                            e.SuppressKeyPress = true;
+                            _srFilterDebounce?.Stop();
+                            RefreshSarooList();
+                        }
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
+            // Saroo clear button
+            try
+            {
+                if (btnSarooClearFilter != null && txtSarooFilter != null)
+                {
+                    btnSarooClearFilter.Click += (_, __) =>
+                    {
+                        txtSarooFilter.Text = string.Empty;
+                        _srFilterDebounce?.Stop();
+                        RefreshSarooList();
+                    };
+                }
+            }
+            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
+
             btnSrChoose.Click += (_, __) =>
             {
                 using var dlg = new FolderBrowserDialog { ShowNewFolderButton = false };
@@ -933,19 +1931,29 @@ namespace SDBuilderWin
             rbSrFiles.CheckedChanged += (_, __) => { if (rbSrFiles.Checked) { SetSrStatus("Mode: Files"); RefreshSarooList(); } };
             rbSrDirs.CheckedChanged += (_, __) => { if (rbSrDirs.Checked) { SetSrStatus("Mode: Directories"); RefreshSarooList(); } };
 
-            lvSrList.ItemChecked += (_, __) => { if (!_srBulkChange) UpdateSrCounters(); };
+            lvSrList.ItemChecked += (s, e) => {
+                if (_srBulkChange) return;
+                try {
+                    var it = e?.Item as ListViewItem;
+                    if (it != null) {
+                        var path = it.Text;
+                        if (it.Checked) _srChecked.Add(path); else _srChecked.Remove(path);
+                    }
+                } catch { /* ignore */ }
+                UpdateSrCounters();
+            };
 
             btnSrCheckAll.Click += (_, __) =>
             {
                 _srBulkChange = true;
-                foreach (ListViewItem it in lvSrList.Items) it.Checked = true;
+                foreach (ListViewItem it in lvSrList.Items) { it.Checked = true; _srChecked.Add(it.Text); }
                 _srBulkChange = false;
                 UpdateSrCounters();
             };
             btnSrUncheckAll.Click += (_, __) =>
             {
                 _srBulkChange = true;
-                foreach (ListViewItem it in lvSrList.Items) it.Checked = false;
+                foreach (ListViewItem it in lvSrList.Items) { it.Checked = false; _srChecked.Remove(it.Text); }
                 _srBulkChange = false;
                 UpdateSrCounters();
             };
@@ -959,6 +1967,7 @@ namespace SDBuilderWin
         void WireGamecubeListmaker()
         {
             // columns
+            // ===== GameCube UI wiring START =====
             lvGcList.View = View.Details;
             lvGcList.FullRowSelect = true;
             lvGcList.HideSelection = false;
@@ -966,8 +1975,9 @@ namespace SDBuilderWin
             {
                 lvGcList.Columns.Clear();
                 lvGcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                lvGcList.Columns.Add("Status", GcStatusColWidth, HorizontalAlignment.Left);
+                lvGcList.Columns.Add("Size", GcStatusColWidth, HorizontalAlignment.Left);
             }
+            // ===== END GameCube UI wiring =====
 
             void AutoSizeGc()
             {
@@ -994,19 +2004,33 @@ namespace SDBuilderWin
             rbGcFiles.CheckedChanged += (_, __) => { if (rbGcFiles.Checked) { SetGcStatus("Mode: Files"); RefreshGamecubeList(); } };
             rbGcDirs.CheckedChanged += (_, __) => { if (rbGcDirs.Checked) { SetGcStatus("Mode: Directories"); RefreshGamecubeList(); } };
 
-            lvGcList.ItemChecked += (_, __) => { if (!_gcBulkChange) UpdateGcCounters(); };
+            lvGcList.ItemChecked += (s, e) =>
+            {
+                if (_gcBulkChange) return;
+                try
+                {
+                    var it = e?.Item as ListViewItem;
+                    if (it != null)
+                    {
+                        var path = it.Text;
+                        if (it.Checked) _gcChecked.Add(path); else _gcChecked.Remove(path);
+                    }
+                }
+                catch { /* ignore */ }
+                UpdateGcCounters();
+            };
 
             btnGcCheckAll.Click += (_, __) =>
             {
                 _gcBulkChange = true;
-                foreach (ListViewItem it in lvGcList.Items) it.Checked = true;
+                foreach (ListViewItem it in lvGcList.Items) { it.Checked = true; _gcChecked.Add(it.Text); }
                 _gcBulkChange = false;
                 UpdateGcCounters();
             };
             btnGcUncheckAll.Click += (_, __) =>
             {
                 _gcBulkChange = true;
-                foreach (ListViewItem it in lvGcList.Items) it.Checked = false;
+                foreach (ListViewItem it in lvGcList.Items) { it.Checked = false; _gcChecked.Remove(it.Text); }
                 _gcBulkChange = false;
                 UpdateGcCounters();
             };
@@ -1022,11 +2046,18 @@ namespace SDBuilderWin
 // Mirrors Xstation: rebuild list for current folder + mode
 void RefreshScList()
 {
-    lvScList.BeginUpdate();
     try
     {
+        var scFilterText = (txtScFilter?.Text ?? "*").Trim();
+        var scPatterns = scFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                     .Select(s => s.Trim())
+                                     .ToArray();
+        if (scPatterns.Length == 0) scPatterns = new[] { "*" };
+        scPatterns = scPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
+
+        lvScList.BeginUpdate();
+        _scBulkChange = true;
         lvScList.Items.Clear();
-        UpdateScCounters();
         if (string.IsNullOrWhiteSpace(_scFolder) || !Directory.Exists(_scFolder))
         {
             SetScStatus("Ready.");
@@ -1041,16 +2072,19 @@ void RefreshScList()
         {
             lvScList.Columns.Clear();
             lvScList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-            lvScList.Columns.Add("Status", 160, HorizontalAlignment.Left);
+            lvScList.Columns.Add("Size", 160, HorizontalAlignment.Left);
         }
 
         if (rbScFiles.Checked)
         {
             foreach (var f in Directory.EnumerateFiles(_scFolder, "*", SearchOption.TopDirectoryOnly))
             {
+                var name = System.IO.Path.GetFileName(f);
+                if (!MatchesAnyPattern(name, scPatterns) && !MatchesAnyPattern(f, scPatterns)) continue;
                 var it = new ListViewItem(f);
                 it.SubItems.Add("scanning...");
                 it.Tag = (long?)null;
+                it.Checked = _scChecked.Contains(f);
                 lvScList.Items.Add(it);
             }
         }
@@ -1058,9 +2092,12 @@ void RefreshScList()
         {
             foreach (var d in Directory.EnumerateDirectories(_scFolder, "*", SearchOption.TopDirectoryOnly))
             {
+                var name = System.IO.Path.GetFileName(d);
+                if (!MatchesAnyPattern(name, scPatterns) && !MatchesAnyPattern(d, scPatterns)) continue;
                 var it = new ListViewItem(d);
                 it.SubItems.Add("scanning...");
                 it.Tag = (long?)null;
+                it.Checked = _scChecked.Contains(d);
                 lvScList.Items.Add(it);
             }
         }
@@ -1096,7 +2133,7 @@ void RefreshScList()
                         {
                             it.Tag = sz;
                             it.SubItems[1].Text = (File.Exists(p) || Directory.Exists(p)) ? FormatSize(sz) : "Missing";
-                            UpdateScCounters();
+                            if (it.Checked) UpdateScCounters();
                         }));
                     }
                     catch { }
@@ -1107,9 +2144,15 @@ void RefreshScList()
             catch { }
         });
     }
+    catch (Exception ex)
+    {
+        Error("Summercart64 list error: " + ex.Message);
+    }
     finally
     {
+        _scBulkChange = false;
         lvScList.EndUpdate();
+        UpdateScCounters();
     }
 }
 
@@ -1121,7 +2164,7 @@ void RefreshScList()
             {
                 lvScList.Columns.Clear();
                 lvScList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                lvScList.Columns.Add("Status", 160, HorizontalAlignment.Left);
+                lvScList.Columns.Add("Size", 160, HorizontalAlignment.Left);
             }
 
             void AutoSizeSc()
@@ -1170,19 +2213,56 @@ if (dlg.ShowDialog(this) == DialogResult.OK)
 }
 };
 
-            lvScList.ItemChecked += (_, __) => { if (!_scBulkChange) UpdateScCounters(); };
+            
+            // SummerCart64 search debounce + wiring
+            _scFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
+            _scFilterDebounce.Tick += (_, __) => { _scFilterDebounce!.Stop(); RefreshScList(); };
+            if (txtScFilter != null)
+            {
+                txtScFilter.TextChanged += (_, __) => { _scFilterDebounce?.Stop(); _scFilterDebounce?.Start(); };
+                txtScFilter.KeyDown += (s, e) =>
+                {
+                    if (e.KeyCode == Keys.Enter)
+                    {
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
+                        _scFilterDebounce?.Stop();
+                        RefreshScList();
+                    }
+                };
+            }
+            if (btnScClearFilter != null && txtScFilter != null)
+            {
+                btnScClearFilter.Click += (_, __) =>
+                {
+                    txtScFilter.Text = string.Empty;
+                    _scFilterDebounce?.Stop();
+                    RefreshScList();
+                };
+            }
+    lvScList.ItemChecked += (s, e) =>
+            {
+                if (_scBulkChange) return;
+                var it = e?.Item as ListViewItem;
+                if (it != null)
+                {
+                    var path = it.Text;
+                    if (it.Checked) _scChecked.Add(path); else _scChecked.Remove(path);
+                }
+                UpdateScCounters();
+            };
 
             btnScCheckAll.Click += (_, __) =>
             {
                 _scBulkChange = true;
-                foreach (ListViewItem it in lvScList.Items) it.Checked = true;
+                foreach (ListViewItem it in lvScList.Items) { it.Checked = true; _scChecked.Add(it.Text); }
                 _scBulkChange = false;
                 UpdateScCounters();
             };
             btnScUncheckAll.Click += (_, __) =>
             {
                 _scBulkChange = true;
-                foreach (ListViewItem it in lvScList.Items) it.Checked = false;
+                foreach (ListViewItem it in lvScList.Items) { it.Checked = false; _scChecked.Remove(it.Text); }
                 _scBulkChange = false;
                 UpdateScCounters();
             };
@@ -1233,7 +2313,14 @@ rbScDirs.CheckedChanged += (_, __) =>
         {
             try
             {
+                var gcFilterText = (txtGcFilter?.Text ?? "*").Trim();
+                var gcPatterns = gcFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                            .Select(s => s.Trim())
+                                            .ToArray();
+                if (gcPatterns.Length == 0) gcPatterns = new[] { "*" };
+                gcPatterns = gcPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
                 lvGcList.BeginUpdate();
+                _gcBulkChange = true;
                 lvGcList.Items.Clear();
                 if (!Directory.Exists(_gcFolder)) { SetGcStatus("Ready."); return; }
 
@@ -1243,39 +2330,48 @@ rbScDirs.CheckedChanged += (_, __) =>
                 {
                     lvGcList.Columns.Clear();
                     lvGcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvGcList.Columns.Add("Status", GcStatusColWidth, HorizontalAlignment.Left);
+                    lvGcList.Columns.Add("Size", GcStatusColWidth, HorizontalAlignment.Left);
                 }
 
                 if (rbGcFiles.Checked)
                 {
                     foreach (var f in Directory.EnumerateFiles(_gcFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(f);
+                        if (!MatchesAnyPattern(name, gcPatterns) && !MatchesAnyPattern(f, gcPatterns)) continue;
                         var it = new ListViewItem(f);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
-                        lvGcList.Items.Add(it);
+                        it.Checked = _sarooChecked.Contains(f);
+                        it.Checked = _scChecked.Contains(f);
+                        it.Checked = _gcChecked.Contains(f);
+lvGcList.Items.Add(it);
                     }
                 }
                 else
                 {
                     foreach (var d in Directory.EnumerateDirectories(_gcFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(d);
+                        if (!MatchesAnyPattern(name, gcPatterns) && !MatchesAnyPattern(d, gcPatterns)) continue;
                         var it = new ListViewItem(d);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
-                        lvGcList.Items.Add(it);
+                        it.Checked = _scChecked.Contains(d);
+                        it.Checked = _gcChecked.Contains(d);
+lvGcList.Items.Add(it);
                     }
                 }
 
+                UpdateGcCounters();
                 _ = RecalcGcAsync();
             }
             catch (Exception ex)
             {
                 Error("Error refreshing list: " + ex.Message);
             }
-            finally { lvGcList.EndUpdate(); }
+            finally { _gcBulkChange = false;
+                lvGcList.EndUpdate(); }
         }
 
         async Task RecalcGcAsync()
@@ -1333,6 +2429,7 @@ rbScDirs.CheckedChanged += (_, __) =>
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
         }
 
+        // ===== GameCube Copy routine START =====
         async Task CopyGamecubeCheckedAsync(string destDrive, CancellationToken token)
         {
             string destRoot = $@"{destDrive}:\Games";
@@ -1353,7 +2450,8 @@ rbScDirs.CheckedChanged += (_, __) =>
             }
 
             if (copied == 0) Warn("No items checked.");
-        }
+        }        // ===== END GameCube Copy routine =====
+
 
         async Task CopySummercartCheckedAsync(string destDrive, CancellationToken token)
         {
@@ -1382,7 +2480,14 @@ rbScDirs.CheckedChanged += (_, __) =>
         {
             try
             {
+                var srFilterText = (txtSarooFilter?.Text ?? "*").Trim();
+                var srPatterns = srFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                            .Select(s => s.Trim())
+                                            .ToArray();
+                if (srPatterns.Length == 0) srPatterns = new[] { "*" };
+                srPatterns = srPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
                 lvSrList.BeginUpdate();
+                _srBulkChange = true;
                 lvSrList.Items.Clear();
                 if (!Directory.Exists(_srFolder)) { SetSrStatus("Ready."); return; }
 
@@ -1391,17 +2496,22 @@ rbScDirs.CheckedChanged += (_, __) =>
                 {
                     lvSrList.Columns.Clear();
                     lvSrList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvSrList.Columns.Add("Status", XsStatusColWidth, HorizontalAlignment.Left);
+                    lvSrList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
                 }
 
                 if (rbSrFiles.Checked)
                 {
                     foreach (var f in Directory.EnumerateFiles(_srFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(f);
+                        if (!MatchesAnyPattern(name, srPatterns) && !MatchesAnyPattern(f, srPatterns)) continue;
                         var it = new ListViewItem(f);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
+                        it.Checked = _sarooChecked.Contains(f);
+                        it.Checked = _scChecked.Contains(f);
+                        it.Checked = _gcChecked.Contains(f);
+                        it.Checked = _srChecked.Contains(f);
                         lvSrList.Items.Add(it);
                     }
                 }
@@ -1409,10 +2519,14 @@ rbScDirs.CheckedChanged += (_, __) =>
                 {
                     foreach (var d in Directory.EnumerateDirectories(_srFolder, "*", SearchOption.TopDirectoryOnly))
                     {
+                        var name = System.IO.Path.GetFileName(d);
+                        if (!MatchesAnyPattern(name, srPatterns) && !MatchesAnyPattern(d, srPatterns)) continue;
                         var it = new ListViewItem(d);
                         it.SubItems.Add("scanning...");
                         it.Tag = (long?)null;
-                        it.Checked = false;
+                        it.Checked = _scChecked.Contains(d);
+                        it.Checked = _gcChecked.Contains(d);
+                        it.Checked = _srChecked.Contains(d);
                         lvSrList.Items.Add(it);
                     }
                 }
@@ -1423,7 +2537,8 @@ rbScDirs.CheckedChanged += (_, __) =>
             {
                 Error("Saroo list error: " + ex.Message);
             }
-            finally { lvSrList.EndUpdate(); }
+            finally { _srBulkChange = false;
+                lvSrList.EndUpdate(); }
         }
 
         void UpdateSrCounters()
@@ -1498,6 +2613,7 @@ rbScDirs.CheckedChanged += (_, __) =>
             catch { /* cancelled */ }
         }
 
+        // ===== Saroo Copy routine START =====
         async Task CopySarooCheckedAsync(string destDrive, CancellationToken token)
         {
             string sarooRoot = $"{destDrive}:\\Saroo\\ISO";
@@ -1518,7 +2634,8 @@ rbScDirs.CheckedChanged += (_, __) =>
             }
 
             if (copied == 0) Warn("No items checked.");
-        }
+        }        // ===== END Saroo Copy routine =====
+
 
 
 
@@ -2255,12 +3372,17 @@ rbScDirs.CheckedChanged += (_, __) =>
                 Platform.Saroo => $@"{destDrive}:\SAROO\ISO",
                 Platform.Gamecube => $@"{destDrive}:\Games",
                 Platform.Summercart64 => $@"{destDrive}:\Roms",
-                _ => throw new InvalidOperationException()
+                Platform.Dreamcast    => $@"{destDrive}:\",
+            _ => throw new InvalidOperationException()
             };
             Directory.CreateDirectory(destRoot);
             Info($"Destination path: {destRoot}");
 
-            foreach (var raw in File.ReadAllLines(listPath))
+            
+            var existingSerials = platform == Platform.Dreamcast
+                ? IndexDcSerials(destRoot)
+                : new System.Collections.Generic.Dictionary<string, string>();
+foreach (var raw in File.ReadAllLines(listPath))
             {
                 token.ThrowIfCancellationRequested();
                 if (raw == null) continue;
@@ -2270,6 +3392,25 @@ rbScDirs.CheckedChanged += (_, __) =>
                 if (line.StartsWith("\"") && line.EndsWith("\"") && line.Length >= 2) line = line[1..^1];
                 line = line.TrimEnd(' ', '.');
                 if (!File.Exists(line) && !Directory.Exists(line)) { Info($"[SKIP] Not found: \"{line}\""); continue; }
+                
+                // Dreamcast duplicate-by-serial skip for Start (list)
+                if (platform == Platform.Dreamcast)
+                {
+                    try
+                    {
+                        if (TryExtractDcSerialFromSource(line, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
+                        {
+                            if (existingSerials.TryGetValue(srcSerial, out var idxDup))
+                            {
+                                Info(string.Format("[SKIP] Already present as \\{0} (serial {1})", idxDup, srcSerial));
+                                WaitEnterOrTimeout(CopyTimeout, token);
+                                continue; // skip this list item
+                            }
+                        }
+                    }
+                    catch { /* ignore */ }
+                }
+if (token.IsCancellationRequested) return;
                 await CopyEntry(line, platform, destRoot, token);
             }
             Info("All entries processed.");
@@ -2277,6 +3418,113 @@ rbScDirs.CheckedChanged += (_, __) =>
 
         async Task CopyEntry(string source, Platform platform, string destRoot, CancellationToken token)
         {
+            if (token.IsCancellationRequested) return;
+
+
+// Dreamcast: always copy into next free 02..9999 index folder and rename disc
+if (platform == Platform.Dreamcast)
+{
+    if (Directory.Exists(source))
+    {
+        var dcDest = NextDreamcastIndexFolder(destRoot);
+        Directory.CreateDirectory(dcDest);
+
+        var name = new DirectoryInfo(source).Name;
+        Info($"Copying Dreamcast folder → '{name}' → {Path.GetFileName(dcDest)}");
+        await RoboCopyDir(source, dcDest, token);
+
+        // Rename any top-level .gdi to disc.gdi
+        try
+        {
+            var gdis = Directory.GetFiles(dcDest, "*.gdi", SearchOption.TopDirectoryOnly);
+            if (gdis.Length > 0)
+            {
+                var gdiSrc = gdis[0];
+                var gdiDst = Path.Combine(dcDest, "disc.gdi");
+                if (!string.Equals(Path.GetFileName(gdiSrc), "disc.gdi", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(gdiDst)) File.Delete(gdiDst);
+                    File.Move(gdiSrc, gdiDst);
+                }
+            }
+        }
+        catch { /* ignore */ }
+
+        try {{ if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) {{ if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  }} }} catch {{ /* ignore */ }}
+WaitEnterOrTimeout(CopyTimeout, token);
+                    try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  } } catch { /* ignore */ }
+        return;
+    }
+    else if (File.Exists(source))
+    {
+        var dcDest = NextDreamcastIndexFolder(destRoot);
+        Directory.CreateDirectory(dcDest);
+
+        var leaf = Path.GetFileName(source);
+        var ext = Path.GetExtension(source).ToLowerInvariant();
+
+        if (ext == ".cdi")
+        {
+            var target = Path.Combine(dcDest, "disc.cdi");
+            var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
+            if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
+            if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
+
+            Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(source, dcDest, token);
+
+            var copied = Path.Combine(dcDest, leaf);
+            if (!string.Equals(leaf, "disc.cdi", StringComparison.OrdinalIgnoreCase) && File.Exists(copied))
+            {
+                if (File.Exists(target)) File.Delete(target);
+                File.Move(copied, target);
+            }
+            try {{ if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) {{ if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  }} }} catch {{ /* ignore */ }}
+WaitEnterOrTimeout(CopyTimeout, token);
+                    try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  } } catch { /* ignore */ }
+            return;
+        }
+        else if (ext == ".gdi")
+        {
+            var target = Path.Combine(dcDest, "disc.gdi");
+            var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
+            if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
+            if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
+
+            Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(source, dcDest, token);
+
+            var copied = Path.Combine(dcDest, leaf);
+            if (!string.Equals(leaf, "disc.gdi", StringComparison.OrdinalIgnoreCase) && File.Exists(copied))
+            {
+                if (File.Exists(target)) File.Delete(target);
+                File.Move(copied, target);
+            }
+            try {{ if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) {{ if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  }} }} catch {{ /* ignore */ }}
+WaitEnterOrTimeout(CopyTimeout, token);
+                    try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  } } catch { /* ignore */ }
+            return;
+        }
+        else
+        {
+            var target = Path.Combine(dcDest, leaf);
+            var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
+            if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
+            if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
+
+            Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
+            await RoboCopyFile(source, dcDest, token);
+            try {{ if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) {{ if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  }} }} catch {{ /* ignore */ }}
+WaitEnterOrTimeout(CopyTimeout, token);
+                    try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { }  } } catch { /* ignore */ }
+            return;
+        }
+    }
+
+    Info($"[SKIP] Not found: '{source}'");
+    return;
+}
+
 
 
 
@@ -2311,7 +3559,7 @@ rbScDirs.CheckedChanged += (_, __) =>
                         if (d == ReplaceDecision.Cancel) throw new OperationCanceledException();
                     }
                     Directory.CreateDirectory(dest);
-                    Info($"Copying folder '{Path.GetFileName(source.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))}' → {GetPlatformCopyLabel(platform)}");
+                    Info($"Copying folder → '{Path.GetFileName(source.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))}' → {GetPlatformCopyLabel(platform)}");
                     await RoboCopyDir(source, dest, token);
                     WaitEnterOrTimeout(CopyTimeout, token);
                     return;
@@ -2511,6 +3759,7 @@ rbScDirs.CheckedChanged += (_, __) =>
             await using var fs = File.Create(outFile);
             await resp.Content.CopyToAsync(fs, token);
         }
+// ===== Helpers START =====
         void ExpandZip(string zipPath, string dest)
         {
             if (Directory.Exists(dest)) { try { Directory.Delete(dest, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } }
@@ -3088,6 +4337,8 @@ rbScDirs.CheckedChanged += (_, __) =>
 
 
 
+// ===== END Helpers =====
+        // ===== Xstation Copy routine START =====
         async Task CopyXstationCheckedAsync(string destDrive, CancellationToken token)
         {
             string destRoot = $@"{destDrive}:\";
@@ -3108,7 +4359,8 @@ rbScDirs.CheckedChanged += (_, __) =>
             }
 
             if (copied == 0) Warn("No items checked.");
-        }
+        }        // ===== END Xstation Copy routine =====
+
         private static string GetPlatformCopyLabel(Platform p) => p switch
         {
             Platform.Xstation => "Root",
@@ -3167,5 +4419,234 @@ rbScDirs.CheckedChanged += (_, __) =>
         {
 
         }
+    
+
+        // ---- Dreamcast: Extract title.txt and serial.txt from IP.BIN (from disc.gdi data track) ----
+        static bool TryExtractDcIpMetadata(string dcIndexFolder, out string? title, out string? serial)
+        {
+            title = null;
+            serial = null;
+            try
+            {
+                var gdiPath = System.IO.Path.Combine(dcIndexFolder, "disc.gdi");
+                if (!System.IO.File.Exists(gdiPath))
+                    return false;
+
+                // Parse disc.gdi to locate the first data track (trackType == 4).
+                string? dataTrackPath = null;
+                int sectorSize = 2352; // default/fallback
+                var lines = System.IO.File.ReadAllLines(gdiPath);
+                foreach (var raw in lines)
+                {
+                    var line = raw.Trim();
+                    if (line.Length == 0) continue;
+                    if (!char.IsDigit(line[0])) continue;
+
+                    // Typical format per line: <trackNo> <LBA> <trackType> <sectorSize> <filename> <offset>
+                    var parts = line.Split(System.Array.Empty<char>(), StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 5)
+                    {
+                        int tt = 0, ss = 0;
+                        if (int.TryParse(parts[2], out tt) && int.TryParse(parts[3], out ss))
+                        {
+                            if (tt == 4)
+                            {
+                                var maybe = System.IO.Path.Combine(dcIndexFolder, parts[4]);
+                                if (System.IO.File.Exists(maybe))
+                                {
+                                    dataTrackPath = maybe;
+                                    sectorSize = ss;
+                                    break; // first data track
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (dataTrackPath == null)
+                {
+                    // Fallback: many images use track03.bin as first data track
+                    var maybe = System.IO.Path.Combine(dcIndexFolder, "track03.bin");
+                    if (System.IO.File.Exists(maybe))
+                    {
+                        dataTrackPath = maybe;
+                        sectorSize = 2352;
+                    }
+                }
+                if (dataTrackPath == null) return false;
+
+                byte[] ip = ReadIpBinFromTrack(dataTrackPath, sectorSize);
+                if (ip == null || ip.Length < 0x200) return false;
+
+                // Serial/product at 0x40 (length ~10, ASCII padded)
+                var prod = ExtractAscii(ip, 0x40, 10);
+                if (!string.IsNullOrWhiteSpace(prod)) serial = prod.Trim();
+
+                // Title/internal name at 0x80, length 0x80 (128 bytes), ASCII padded
+                var name = ExtractAscii(ip, 0x80, 0x80);
+                if (!string.IsNullOrWhiteSpace(name)) title = name.Trim();
+
+                return (title != null) || (serial != null);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static byte[] ReadIpBinFromTrack(string trackPath, int sectorSize)
+        {
+            // IP.BIN is the first 32 KiB of user data (16 sectors * 2048 bytes).
+            const int IP_LEN = 32768;
+            using (var fs = System.IO.File.OpenRead(trackPath))
+            {
+                if (sectorSize == 2048)
+                {
+                    int toRead = (int)System.Math.Min(IP_LEN, System.Math.Max(0, fs.Length));
+                    var buf = new byte[toRead];
+                    fs.Read(buf, 0, toRead);
+                    return buf;
+                }
+                else if (sectorSize == 2352)
+                {
+                    int sectors = 16;
+                    int per = 2352;
+                    var outBuf = new byte[sectors * 2048];
+                    var inBuf = new byte[per];
+                    int outOfs = 0;
+                    for (int i = 0; i < sectors; i++)
+                    {
+                        int read = fs.Read(inBuf, 0, per);
+                        if (read < per) break;
+                        // Mode1 user data usually begins at offset 16 (skip sync + header)
+                        System.Buffer.BlockCopy(inBuf, 16, outBuf, outOfs, System.Math.Min(2048, read - 16));
+                        outOfs += 2048;
+                    }
+                    return outBuf;
+                }
+                else
+                {
+                    // Unknown sector size: read raw up to IP_LEN
+                    int toRead = (int)System.Math.Min(IP_LEN, System.Math.Max(0, fs.Length));
+                    var buf = new byte[toRead];
+                    fs.Read(buf, 0, toRead);
+                    return buf;
+                }
+            }
+        }
+
+        static string ExtractAscii(byte[] buf, int offset, int count)
+        {
+            try
+            {
+                if (offset < 0 || offset + count > buf.Length) return string.Empty;
+                var s = System.Text.Encoding.ASCII.GetString(buf, offset, count);
+                // Normalize: replace NULs with spaces, trim, collapse double spaces
+                s = s.Replace('\0', ' ').Trim();
+                while (s.Contains("  ")) s = s.Replace("  ", " ");
+                return s;
+            }
+            catch { return string.Empty; }
+        }
+    
+    
+
+// Dreamcast item metadata for guard logic (avoids relying on column headers)
+private sealed class DcMeta
+{
+    public bool Installed;
+    public long Size;
+}
+
+
+// Helper: true if ListViewItem.Tag is DcMeta with Installed=true
+private static bool DcIsInstalled(ListViewItem it)
+{
+    try { return it?.Tag is DcMeta m && m.Installed; }
+    catch { return false; }
+}
+
+
+    // ===== END Helpers =====
+
+private async void btnRebuildList_Click(object sender, EventArgs e)
+{
+            Info("[Rebuild List] Starting…");
+try
+    {
+        await WithDriveJobAsync(async (d, token) =>
+        {
+            string sdRoot  = $@"{d}:\";
+            string listPath;
+            int written;
+            string fmt = DetectDreamcastMenuFormatFromSerialTxt(sdRoot);
+            bool ok;
+            if (fmt == "OpenMenu")
+                ok = RebuildOpenmenuList(sdRoot, out listPath, out written);
+            else
+                ok = RebuildGdmenuList(sdRoot, out listPath, out written);
+
+            // Show result back on UI thread
+            try
+            {
+                this.BeginInvoke(new Action(() =>
+                {
+                    if (ok)
+{System.Windows.Forms.MessageBox.Show(
+            this,
+            "List rebuilt (" + written + " entries)\n" +
+            "Saved in: " + GetMenuFolderLabel(fmt),
+            "Rebuild List"
+    );
+}
+else
+{
+            System.Windows.Forms.MessageBox.Show(
+            this,
+            "No infoNN.txt files found or write failed.",
+            "Rebuild List"
+    );
+}
+                }));
+            }
+            catch { }
+
+            await System.Threading.Tasks.Task.CompletedTask;
+        });
     }
+    catch (System.Exception ex) { Error("[Rebuild List] Failed: " + ex.Message); 
+        System.Windows.Forms.MessageBox.Show(this, "Rebuild failed: " + ex.Message, "Rebuild List",
+            System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+    
+}
+        
+            Info("[Rebuild List] Completed.");
+        }
+    
+    
+        // Dreamcast menu detection via \01\serial.txt (app never reads app-side tools\menu_data here)
+        private static string DetectDreamcastMenuFormatFromSerialTxt(string sdRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(sdRoot) || !System.IO.Directory.Exists(sdRoot))
+                    return "Unknown";
+                string p = System.IO.Path.Combine(sdRoot, "01", "serial.txt");
+                if (!System.IO.File.Exists(p)) return "Unknown";
+                string[] lines = System.IO.File.ReadAllLines(p, System.Text.Encoding.UTF8);
+                foreach (var raw in lines)
+                {
+                    var s = (raw ?? string.Empty).Trim();
+                    if (s.Length == 0) continue;
+                    s = s.ToUpperInvariant();
+                    if (s == "GDMENU") return "GDMenu";
+                    if (s == "NEODC_1") return "OpenMenu";
+                    break;
+                }
+                return "Unknown";
+            }
+            catch { return "Unknown"; }
+        }
+
+}
 }

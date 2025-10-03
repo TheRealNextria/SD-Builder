@@ -5,5 +5,14 @@
     <Compile Update="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="MainForm.DcInfoHelpers.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="MainForm.GdmenuRebuild.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="MainForm.Track05.cs">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
 </Project>
