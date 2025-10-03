@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <AssemblyName>SD-Builder</AssemblyName>
+    <RootNamespace>SDBuilderWin</RootNamespace>
+
+    <!-- Icon & manifest -->
+    <ApplicationIcon>Assets\SDBuilder_Icon.ico</ApplicationIcon>
+    <Win32Manifest>app.manifest</Win32Manifest>
+
+    <!-- Single-file, self-contained publish -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+	<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+
+    <!-- Enable R2R if you like faster startup at slight size cost -->
+    <!--<PublishReadyToRun>true</PublishReadyToRun>-->
+
+    <Prefer32Bit>false</Prefer32Bit>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\SDBuilder_Icon.ico" />
+    <None Include="app.manifest" />
+  </ItemGroup>
+</Project>
