@@ -1221,6 +1221,13 @@ var dcExistingSerials = (dcDrive != null)
     ? IndexDcSerials($@"{dcDrive}:")
     : new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
 
+var dcExistingSerialDiscs = (dcDrive != null)
+    ? IndexDcSerialDiscs($@"{dcDrive}:")
+    : new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(System.StringComparer.OrdinalIgnoreCase);
+
+
+
+
                 var ct = _dcScanCts.Token;
 
                 await Task.Run(() =>
@@ -1237,7 +1244,22 @@ try
     // 1) Try direct serial extraction from this path (works well for .gdi)
     if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
     {
-        isInstalled = dcExistingSerials.ContainsKey(srcSerial);
+        if (dcExistingSerialDiscs.TryGetValue(srcSerial, out var discsSet))
+        {
+            if (TryGuessDiscKey(it.Text, path, out var dk))
+            {
+                isInstalled = discsSet.Contains(dk) || System.Linq.Enumerable.Any(discsSet, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                // If we cannot determine disc number, assume NOT installed unless it's clearly single-disc only.
+                isInstalled = discsSet.Contains("1/1");
+            }
+        }
+        else
+        {
+            isInstalled = false;
+        }
     }
     else
     {
@@ -1263,7 +1285,24 @@ try
             }
             if (!string.IsNullOrWhiteSpace(dirSerial))
             {
-                isInstalled = dcExistingSerials.ContainsKey(dirSerial);
+                // Disc-aware check
+            if (dcExistingSerialDiscs.TryGetValue(dirSerial, out var discsSet))
+            {
+                if (TryGuessDiscKey(it.Text, path, out var dk))
+                {
+                    isInstalled = discsSet.Contains(dk) || System.Linq.Enumerable.Any(discsSet, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    // If we cannot determine disc number, assume NOT installed unless it's clearly single-disc only.
+                    isInstalled = discsSet.Contains("1/1");
+                }
+            }
+            else
+            {
+                isInstalled = false;
+            }
+
             }
         }
     }
@@ -1490,6 +1529,137 @@ static System.Collections.Generic.Dictionary<string,string> IndexDcSerials(strin
     return map;
 }
 
+// Build a map of existing serials + disc markers on the SD: serial -> set of "D/T" strings (e.g., "1/2").
+static System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> IndexDcSerialDiscs(string destRoot)
+{
+    var map = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(System.StringComparer.OrdinalIgnoreCase);
+    try
+    {
+        if (!System.IO.Directory.Exists(destRoot)) return map;
+        for (int i = 2; i <= 9999; i++)
+        {
+            var idx = (i < 100) ? i.ToString("00") : (i < 1000) ? i.ToString("000") : i.ToString("0000");
+            var dir = System.IO.Path.Combine(destRoot, idx);
+            if (!System.IO.Directory.Exists(dir)) continue;
+
+            string? serial = null;
+            string? disc = null;
+
+            // Prefer infoNN.txt (has disc + product)
+            var infoPath = System.IO.Path.Combine(dir, "info" + idx + ".txt");
+            if (System.IO.File.Exists(infoPath))
+            {
+                try
+                {
+                    foreach (var line in System.IO.File.ReadAllLines(infoPath, System.Text.Encoding.UTF8))
+                    {
+                        var s = (line ?? string.Empty).Trim();
+                        if (s.Length == 0) continue;
+                        if (disc == null && s.IndexOf(".disc=", System.StringComparison.OrdinalIgnoreCase) > 0)
+                        {
+                            var p = s.Split(new[] { ".disc=" }, StringSplitOptions.None);
+                            if (p.Length == 2) disc = (p[1] ?? string.Empty).Trim();
+                        }
+                        if (!string.IsNullOrWhiteSpace(serial) && !string.IsNullOrWhiteSpace(disc)) break;
+                    }
+                }
+                catch { /* ignore */ }
+            }
+
+            // Fallback to serial.txt (no disc info)
+            if (string.IsNullOrWhiteSpace(serial))
+            {
+                var p = System.IO.Path.Combine(dir, "serial.txt");
+                if (System.IO.File.Exists(p))
+                {
+                    try { serial = System.IO.File.ReadAllText(p).Trim(); } catch { }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(serial)) continue;
+            disc = string.IsNullOrWhiteSpace(disc) ? "1/1" : disc;
+
+            if (!map.TryGetValue(serial, out var set))
+            {
+                set = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                map[serial] = set;
+            }
+            set.Add(disc);
+        }
+    }
+    catch { /* ignore */ }
+    return map;
+}
+
+// Best-effort parse of disc number from a filename/title. Returns true if a disc number was found.
+static bool TryParseDiscFromName(string? name, out int discNum, out int discTot)
+{
+    discNum = 1; discTot = 1;
+    if (string.IsNullOrWhiteSpace(name)) return false;
+    string s = name!;
+
+    // Normalize
+    s = s.Replace('_', ' ').Trim();
+
+    // Patterns: (Disc 1 of 2), (Disc 2), Disc 1, CD1, CD 2, (1of2), [Disc 2/2], etc.
+    var patterns = new string[]
+    {
+        @"\bDisc\s*(\d+)\s*(?:of|/)\s*(\d+)\b",
+        @"\bCD\s*(\d+)\s*(?:of|/)\s*(\d+)\b",
+        @"\bDisk\s*(\d+)\s*(?:of|/)\s*(\d+)\b",
+        @"\bDisc\s*(\d+)\b",
+        @"\bCD\s*(\d+)\b",
+        @"\bDisk\s*(\d+)\b",
+        @"\b\(?(\d+)\s*(?:of|/)\s*(\d+)\)?\b",
+        @"\bCD(\d+)\b",
+        @"\bDisc(\d+)\b"
+    };
+
+    foreach (var pat in patterns)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(s, pat, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m.Success)
+        {
+            if (m.Groups.Count >= 2 && int.TryParse(m.Groups[1].Value, out int n))
+            {
+                discNum = n;
+                if (m.Groups.Count >= 3 && int.TryParse(m.Groups[2].Value, out int t)) discTot = t;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Try to produce a "D/T" disc key from UI text and/or a file path.
+static bool TryGuessDiscKey(string itemText, string path, out string discKey)
+{
+    discKey = "";
+    int dNum, dTot;
+    // 1) From the item text
+    if (TryParseDiscFromName(itemText, out dNum, out dTot))
+    {
+        discKey = dNum.ToString() + "/" + (dTot <= 0 ? "1" : dTot.ToString());
+        return true;
+    }
+    // 2) From the file/folder name
+    var leaf = System.IO.Path.GetFileName(path) ?? "";
+    if (TryParseDiscFromName(leaf, out dNum, out dTot))
+    {
+        discKey = dNum.ToString() + "/" + (dTot <= 0 ? "1" : dTot.ToString());
+        return true;
+    }
+    var parent = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path) ?? "") ?? "";
+    if (TryParseDiscFromName(parent, out dNum, out dTot))
+    {
+        discKey = dNum.ToString() + "/" + (dTot <= 0 ? "1" : dTot.ToString());
+        return true;
+    }
+    return false;
+}
+
+
+
 
 static string PadDcIndex(int n)
 {
@@ -1574,6 +1744,7 @@ private static string SanitizeMenuTitle32(string? s)
 {
     var destRoot = $@"{destDrive}:\";
     var existingSerials = IndexDcSerials(destRoot);
+    var existingSerialDiscs = IndexDcSerialDiscs(destRoot);
     Directory.CreateDirectory(destRoot);
 
         // Build sources: group by parent folder in Files mode so one game = one index
@@ -1604,9 +1775,36 @@ private static string SanitizeMenuTitle32(string? s)
     foreach (var path in sources)
     {
 
-        try { if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial)) { if (existingSerials.TryGetValue(srcSerial, out var idx)) { Info(string.Format("[SKIP] Already present as \\{0} (serial {1})", idx, srcSerial)); WaitEnterOrTimeout(CopyTimeout, token);
-        if (token.IsCancellationRequested) return;
-        continue; } } } catch { /* ignore */ }
+        try
+{
+    if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
+    {
+        if (existingSerialDiscs.TryGetValue(srcSerial, out var setDiscs))
+        {
+            string dk;
+            if (TryGuessDiscKey(System.IO.Path.GetFileName(path) ?? string.Empty, path, out dk))
+            {
+                if (setDiscs.Contains(dk) || System.Linq.Enumerable.Any(setDiscs, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase)))
+                {
+                    var idxDup = existingSerials[srcSerial];
+                    Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial}, disc {dk})");
+                    WaitEnterOrTimeout(CopyTimeout, token);
+                    if (token.IsCancellationRequested) return;
+                    continue;
+                }
+            }
+            else if (setDiscs.Contains("1/1"))
+            {
+                var idxDup = existingSerials[srcSerial];
+                Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial})");
+                WaitEnterOrTimeout(CopyTimeout, token);
+                if (token.IsCancellationRequested) return;
+                continue;
+            }
+        }
+    }
+}
+catch { /* ignore */ }
         var dcDest = NextDreamcastIndexFolder(destRoot); // always next free 01..9999
         token.ThrowIfCancellationRequested();
         Directory.CreateDirectory(dcDest);
@@ -2139,7 +2337,7 @@ void RefreshScList()
                     catch { }
                 }
 
-                BeginInvoke(new Action(() => SetScStatus("Ready.")));
+                BeginInvoke(new Action(() => SetScStatus($"Ready. {lvScList.Items.Count} items.")));
             }
             catch { }
         });
@@ -2423,7 +2621,7 @@ lvGcList.Items.Add(it);
                     }
                 }, ct);
 
-                BeginInvoke(new Action(() => SetGcStatus("Ready.")));
+                BeginInvoke(new Action(() => SetGcStatus($"Ready. {lvGcList.Items.Count} items.")));
             }
             catch (OperationCanceledException) { /* ignore */ }
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
@@ -2616,25 +2814,180 @@ lvGcList.Items.Add(it);
         // ===== Saroo Copy routine START =====
         async Task CopySarooCheckedAsync(string destDrive, CancellationToken token)
         {
-            string sarooRoot = $"{destDrive}:\\Saroo\\ISO";
-            Directory.CreateDirectory(sarooRoot);
-            int copied = 0;
+string destRoot = $@"{destDrive}:\Saroo\ISO\";
+Directory.CreateDirectory(destRoot);
+int copied = 0;
 
-            foreach (ListViewItem it in lvSrList.Items)
+if (rbSrFiles.Checked)
+{
+    static List<string> ParseCueSet(string cuePath)
+    {
+        var result = new List<string>();
+        try
+        {
+            result.Add(cuePath);
+            var dir = Path.GetDirectoryName(cuePath) ?? "";
+            foreach (var line in System.IO.File.ReadAllLines(cuePath))
             {
-                if (!it.Checked) continue;
-                var path = it.Text;
-                if (!File.Exists(path) && !Directory.Exists(path))
+                var t = line.Trim();
+                if (t.Length == 0) continue;
+                if (t.StartsWith("FILE", StringComparison.OrdinalIgnoreCase))
                 {
-                    Info($"[SKIP] Not found: \"{path}\"");
-                    continue;
+                    int firstQuote = t.IndexOf('\"');
+                    int lastQuote = (firstQuote >= 0) ? t.IndexOf('\"', firstQuote + 1) : -1;
+                    string ? rel = null;
+                    if (firstQuote >= 0 && lastQuote > firstQuote)
+                        rel = t.Substring(firstQuote + 1, lastQuote - firstQuote - 1);
+                    else
+                    {
+                        var parts = t.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2) rel = parts[1];
+                    }
+                    if (!string.IsNullOrWhiteSpace(rel))
+                    {
+                        var full = Path.GetFullPath(Path.Combine(dir, rel));
+                        if (File.Exists(full) && !result.Contains(full, StringComparer.OrdinalIgnoreCase))
+                            result.Add(full);
+                    }
                 }
-                await CopyEntry(path, Platform.Saroo, sarooRoot, token);
-                copied++;
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    var selected = new List<string>();
+    foreach (ListViewItem it in lvSrList.Items)
+    {
+        if (!it.Checked) continue;
+        var p = it.Text;
+        if (File.Exists(p) || Directory.Exists(p)) selected.Add(p);
+        else Info($"[SKIP] Not found: \"{p}\"");
+    }
+    if (selected.Count == 0) { Warn("No items checked."); return; }
+
+    var files = selected.Where(p => File.Exists(p)).ToList();
+    var dirs  = selected.Where(p => Directory.Exists(p)).ToList();
+
+    var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var f in files)
+    {
+        var ext = Path.GetExtension(f);
+        if (ext.Equals(".cue", StringComparison.OrdinalIgnoreCase))
+        {
+            var set = ParseCueSet(f);
+            var cueBase = Path.GetFileNameWithoutExtension(f);
+            if (!groups.TryGetValue(cueBase, out var lst)) groups[cueBase] = lst = new List<string>();
+            foreach (var mbr in set) if (!lst.Contains(mbr, StringComparer.OrdinalIgnoreCase)) lst.Add(mbr);
+        }
+        else
+        {
+            var dir = Path.GetDirectoryName(f) ?? "";
+            var cues = Directory.GetFiles(dir, "*.cue");
+            string ? cueToUse = null;
+
+            if (cues.Length == 1) cueToUse = cues[0];
+            else if (cues.Length > 1)
+            {
+                var parentName = string.IsNullOrEmpty(dir) ? "" : new DirectoryInfo(dir).Name;
+                cueToUse = cues.FirstOrDefault(c => string.Equals(Path.GetFileNameWithoutExtension(c), parentName, StringComparison.OrdinalIgnoreCase));
+                if (cueToUse == null)
+                {
+                    var fname = Path.GetFileName(f);
+                    foreach (var c in cues)
+                    {
+                        try
+                        {
+                            var lines = File.ReadAllLines(c);
+                            if (lines.Any(l => l.IndexOf(fname, StringComparison.OrdinalIgnoreCase) >= 0))
+                            { cueToUse = c; break; }
+                        }
+                        catch { }
+                    }
+                }
             }
 
-            if (copied == 0) Warn("No items checked.");
-        }        // ===== END Saroo Copy routine =====
+            if (!string.IsNullOrEmpty(cueToUse) && File.Exists(cueToUse))
+            {
+                var set = ParseCueSet(cueToUse);
+                var cueBase = Path.GetFileNameWithoutExtension(cueToUse);
+                if (!groups.TryGetValue(cueBase, out var lst)) groups[cueBase] = lst = new List<string>();
+                foreach (var mbr in set) if (!lst.Contains(mbr, StringComparer.OrdinalIgnoreCase)) lst.Add(mbr);
+            }
+            else
+            {
+                var parent = string.IsNullOrEmpty(dir) ? "" : new DirectoryInfo(dir).Name;
+                var key = string.IsNullOrWhiteSpace(parent) ? Path.GetFileNameWithoutExtension(f) : parent;
+                if (!groups.TryGetValue(key, out var lst)) groups[key] = lst = new List<string>();
+                if (!lst.Contains(f, StringComparer.OrdinalIgnoreCase)) lst.Add(f);
+            }
+        }
+    }
+
+    foreach (var kv in groups.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+    {
+
+// Compute a friendly destination label (e.g., "Root" or "Saroo\ISO")
+string destLabel;
+{
+    var rootPrefix = $@"{destDrive}:\\";
+    var labeled = destRoot;
+    if (!labeled.EndsWith(@"\")) labeled += @"\";
+    var rel = labeled.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+        ? labeled.Substring(rootPrefix.Length)
+        : labeled;
+    destLabel = string.IsNullOrEmpty(rel) ? "Root" : rel.TrimEnd('\\');
+}
+Info($"Copying Game Files \u2192 '{kv.Key}' \u2192 {destLabel}");
+
+        var groupName = kv.Key;
+        var members = kv.Value;
+
+        var dest = Path.Combine(destRoot, groupName);
+        bool needsPrompt = Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any();
+        if (needsPrompt)
+        {
+            var d = ConfirmReplaceCountdown(dest, OverwriteTimeout, $"Saroo folder '{groupName}'", folderPromptOnlyWhenNonEmpty: true, token: token);
+            if (d == ReplaceDecision.No) { Info($"[SKIP] Folder '{groupName}'"); continue; }
+            if (d == ReplaceDecision.Cancel) throw new OperationCanceledException();
+        }
+        Directory.CreateDirectory(dest);
+
+        foreach (var mbr in members)
+        {
+            if (!File.Exists(mbr)) { Info($"[SKIP] Missing: '{mbr}'"); continue; }
+            await RoboCopyFile(mbr, dest, token);
+            copied++;
+        }
+
+        WaitEnterOrTimeout(CopyTimeout, token);
+    }
+
+    foreach (var d in dirs)
+    {
+        await CopyEntry(d, Platform.Saroo, destRoot, token);
+        copied++;
+        WaitEnterOrTimeout(CopyTimeout, token);
+    }
+}
+else
+{
+    foreach (ListViewItem it in lvSrList.Items)
+    {
+        if (!it.Checked) continue;
+        var path = it.Text;
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            Info($"[SKIP] Not found: \"{path}\"");
+            continue;
+        }
+        await CopyEntry(path, Platform.Saroo, destRoot, token);
+        copied++;
+    }
+    if (copied == 0) Warn("No items checked.");
+}
+}        // ===== END Saroo Copy routine =====
 
 
 
@@ -3382,6 +3735,10 @@ lvGcList.Items.Add(it);
             var existingSerials = platform == Platform.Dreamcast
                 ? IndexDcSerials(destRoot)
                 : new System.Collections.Generic.Dictionary<string, string>();
+
+            var existingSerialDiscs = platform == Platform.Dreamcast
+                ? IndexDcSerialDiscs(destRoot)
+                : new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
 foreach (var raw in File.ReadAllLines(listPath))
             {
                 token.ThrowIfCancellationRequested();
@@ -3400,12 +3757,25 @@ foreach (var raw in File.ReadAllLines(listPath))
                     {
                         if (TryExtractDcSerialFromSource(line, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
                         {
-                            if (existingSerials.TryGetValue(srcSerial, out var idxDup))
-                            {
-                                Info(string.Format("[SKIP] Already present as \\{0} (serial {1})", idxDup, srcSerial));
-                                WaitEnterOrTimeout(CopyTimeout, token);
-                                continue; // skip this list item
-                            }
+                            if (existingSerialDiscs.TryGetValue(srcSerial, out var setDiscs))
+{
+    string dk;
+    if (TryGuessDiscKey(System.IO.Path.GetFileName(line) ?? string.Empty, line, out dk))
+    {
+        if (setDiscs.Contains(dk) || System.Linq.Enumerable.Any(setDiscs, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase)))
+        {
+            Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1}, disc {2})", existingSerials[srcSerial], srcSerial, dk));
+            WaitEnterOrTimeout(CopyTimeout, token);
+            continue;
+        }
+    }
+    else if (setDiscs.Contains("1/1"))
+    {
+        Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1})", existingSerials[srcSerial], srcSerial));
+        WaitEnterOrTimeout(CopyTimeout, token);
+        continue;
+    }
+}
                         }
                     }
                     catch { /* ignore */ }
@@ -4341,25 +4711,180 @@ WaitEnterOrTimeout(CopyTimeout, token);
         // ===== Xstation Copy routine START =====
         async Task CopyXstationCheckedAsync(string destDrive, CancellationToken token)
         {
-            string destRoot = $@"{destDrive}:\";
-            Directory.CreateDirectory(destRoot);
-            int copied = 0;
+string destRoot = $@"{destDrive}:\\";
+Directory.CreateDirectory(destRoot);
+int copied = 0;
 
-            foreach (ListViewItem it in lvXsList.Items)
+if (rbXsFiles.Checked)
+{
+    static List<string> ParseCueSet(string cuePath)
+    {
+        var result = new List<string>();
+        try
+        {
+            result.Add(cuePath);
+            var dir = Path.GetDirectoryName(cuePath) ?? "";
+            foreach (var line in System.IO.File.ReadAllLines(cuePath))
             {
-                if (!it.Checked) continue;
-                var path = it.Text;
-                if (!File.Exists(path) && !Directory.Exists(path))
+                var t = line.Trim();
+                if (t.Length == 0) continue;
+                if (t.StartsWith("FILE", StringComparison.OrdinalIgnoreCase))
                 {
-                    Info($"[SKIP] Not found: \"{path}\"");
-                    continue;
+                    int firstQuote = t.IndexOf('\"');
+                    int lastQuote = (firstQuote >= 0) ? t.IndexOf('\"', firstQuote + 1) : -1;
+                    string ? rel = null;
+                    if (firstQuote >= 0 && lastQuote > firstQuote)
+                        rel = t.Substring(firstQuote + 1, lastQuote - firstQuote - 1);
+                    else
+                    {
+                        var parts = t.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2) rel = parts[1];
+                    }
+                    if (!string.IsNullOrWhiteSpace(rel))
+                    {
+                        var full = Path.GetFullPath(Path.Combine(dir, rel));
+                        if (File.Exists(full) && !result.Contains(full, StringComparer.OrdinalIgnoreCase))
+                            result.Add(full);
+                    }
                 }
-                await CopyEntry(path, Platform.Xstation, destRoot, token);
-                copied++;
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    var selected = new List<string>();
+    foreach (ListViewItem it in lvXsList.Items)
+    {
+        if (!it.Checked) continue;
+        var p = it.Text;
+        if (File.Exists(p) || Directory.Exists(p)) selected.Add(p);
+        else Info($"[SKIP] Not found: \"{p}\"");
+    }
+    if (selected.Count == 0) { Warn("No items checked."); return; }
+
+    var files = selected.Where(p => File.Exists(p)).ToList();
+    var dirs  = selected.Where(p => Directory.Exists(p)).ToList();
+
+    var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var f in files)
+    {
+        var ext = Path.GetExtension(f);
+        if (ext.Equals(".cue", StringComparison.OrdinalIgnoreCase))
+        {
+            var set = ParseCueSet(f);
+            var cueBase = Path.GetFileNameWithoutExtension(f);
+            if (!groups.TryGetValue(cueBase, out var lst)) groups[cueBase] = lst = new List<string>();
+            foreach (var mbr in set) if (!lst.Contains(mbr, StringComparer.OrdinalIgnoreCase)) lst.Add(mbr);
+        }
+        else
+        {
+            var dir = Path.GetDirectoryName(f) ?? "";
+            var cues = Directory.GetFiles(dir, "*.cue");
+            string ? cueToUse = null;
+
+            if (cues.Length == 1) cueToUse = cues[0];
+            else if (cues.Length > 1)
+            {
+                var parentName = string.IsNullOrEmpty(dir) ? "" : new DirectoryInfo(dir).Name;
+                cueToUse = cues.FirstOrDefault(c => string.Equals(Path.GetFileNameWithoutExtension(c), parentName, StringComparison.OrdinalIgnoreCase));
+                if (cueToUse == null)
+                {
+                    var fname = Path.GetFileName(f);
+                    foreach (var c in cues)
+                    {
+                        try
+                        {
+                            var lines = File.ReadAllLines(c);
+                            if (lines.Any(l => l.IndexOf(fname, StringComparison.OrdinalIgnoreCase) >= 0))
+                            { cueToUse = c; break; }
+                        }
+                        catch { }
+                    }
+                }
             }
 
-            if (copied == 0) Warn("No items checked.");
-        }        // ===== END Xstation Copy routine =====
+            if (!string.IsNullOrEmpty(cueToUse) && File.Exists(cueToUse))
+            {
+                var set = ParseCueSet(cueToUse);
+                var cueBase = Path.GetFileNameWithoutExtension(cueToUse);
+                if (!groups.TryGetValue(cueBase, out var lst)) groups[cueBase] = lst = new List<string>();
+                foreach (var mbr in set) if (!lst.Contains(mbr, StringComparer.OrdinalIgnoreCase)) lst.Add(mbr);
+            }
+            else
+            {
+                var parent = string.IsNullOrEmpty(dir) ? "" : new DirectoryInfo(dir).Name;
+                var key = string.IsNullOrWhiteSpace(parent) ? Path.GetFileNameWithoutExtension(f) : parent;
+                if (!groups.TryGetValue(key, out var lst)) groups[key] = lst = new List<string>();
+                if (!lst.Contains(f, StringComparer.OrdinalIgnoreCase)) lst.Add(f);
+            }
+        }
+    }
+
+    foreach (var kv in groups.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+    {
+
+// Compute a friendly destination label (e.g., "Root" or "Saroo\ISO")
+string destLabel;
+{
+    var rootPrefix = $@"{destDrive}:\\";
+    var labeled = destRoot;
+    if (!labeled.EndsWith(@"\")) labeled += @"\";
+    var rel = labeled.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+        ? labeled.Substring(rootPrefix.Length)
+        : labeled;
+    destLabel = string.IsNullOrEmpty(rel) ? "Root" : rel.TrimEnd('\\');
+}
+Info($"Copying Game Files \u2192 '{kv.Key}' \u2192 {destLabel}");
+
+        var groupName = kv.Key;
+        var members = kv.Value;
+
+        var dest = Path.Combine(destRoot, groupName);
+        bool needsPrompt = Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any();
+        if (needsPrompt)
+        {
+            var d = ConfirmReplaceCountdown(dest, OverwriteTimeout, $"Xstation folder '{groupName}'", folderPromptOnlyWhenNonEmpty: true, token: token);
+            if (d == ReplaceDecision.No) { Info($"[SKIP] Folder '{groupName}'"); continue; }
+            if (d == ReplaceDecision.Cancel) throw new OperationCanceledException();
+        }
+        Directory.CreateDirectory(dest);
+
+        foreach (var mbr in members)
+        {
+            if (!File.Exists(mbr)) { Info($"[SKIP] Missing: '{mbr}'"); continue; }
+            await RoboCopyFile(mbr, dest, token);
+            copied++;
+        }
+
+        WaitEnterOrTimeout(CopyTimeout, token);
+    }
+
+    foreach (var d in dirs)
+    {
+        await CopyEntry(d, Platform.Xstation, destRoot, token);
+        copied++;
+        WaitEnterOrTimeout(CopyTimeout, token);
+    }
+}
+else
+{
+    foreach (ListViewItem it in lvXsList.Items)
+    {
+        if (!it.Checked) continue;
+        var path = it.Text;
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            Info($"[SKIP] Not found: \"{path}\"");
+            continue;
+        }
+        await CopyEntry(path, Platform.Xstation, destRoot, token);
+        copied++;
+    }
+    if (copied == 0) Warn("No items checked.");
+}
+}        // ===== END Xstation Copy routine =====
 
         private static string GetPlatformCopyLabel(Platform p) => p switch
         {

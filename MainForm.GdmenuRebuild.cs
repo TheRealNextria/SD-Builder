@@ -147,8 +147,8 @@ namespace SDBuilderWin
 
                 var sb = new StringBuilder();
                 sb.AppendLine("[OPENMENU]");
-                int total = 1 + entries.Count; // include slot 01 (openMenu)
-                sb.Append("num_items=").Append(total.ToString()).AppendLine();
+                int total = entries.Count; // only real games — exclude fixed slot 01
+				sb.Append("num_items=").Append(total.ToString()).AppendLine();
                 sb.AppendLine();
                 sb.AppendLine("[ITEMS]");
                 // Fixed 01 openMenu block (matches NEODC_1 baseline)
@@ -198,7 +198,7 @@ namespace SDBuilderWin
                 if (File.Exists(listPath)) File.Delete(listPath);
                 File.Move(tmp, listPath);
 
-                writtenCount = total;
+                writtenCount = 1 + entries.Count;
                 return true;
             }
             catch
