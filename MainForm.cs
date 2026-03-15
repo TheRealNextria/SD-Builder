@@ -89,7 +89,7 @@ namespace SDBuilderWin
 
         // ---- URLs
         const string X_FW_Url = "https://github.com/x-station/xstation-releases/releases/download/2.0.2/update202.zip";
-        const string S_Url = "https://github.com/tpunix/SAROO/releases/download/v0.7/firm_v0.7.zip";
+        const string S_Url = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/Saroo.latest.zip";
         const string G_Url = "https://github.com/emukidid/swiss-gc/releases/download/v0.6r1913/swiss_r1913.7z";
         const string GC_CHEATS_Url = "https://github.com/TheRealNextria/SD-Builder/releases/download/1.0/GC.Swiss.cheats.zip";
         const string G_Owner = "emukidid";
@@ -3263,24 +3263,24 @@ else
             await DownloadFileAsync(S_Url, S_Zip, token);
             ExpandZip(S_Zip, S_Extract);
 
-            var srcSaroo = Path.Combine(S_Extract, @"firm_v0.7\SAROO");
+            // Support different archive layouts by locating the 'saroo' folder dynamically.
+            var srcSaroo = Path.Combine(S_Extract, "firm", "saroo");
+            if (!Directory.Exists(srcSaroo))
+            {
+                srcSaroo = Directory.GetDirectories(S_Extract, "saroo", SearchOption.AllDirectories)
+                                    .FirstOrDefault() ?? srcSaroo;
+            }
             if (!Directory.Exists(srcSaroo)) throw new Exception($"Missing folder: {srcSaroo}");
 
             Directory.CreateDirectory(sarooBase);
+
+            var decision = ConfirmReplaceCountdown(sarooBase, OverwriteTimeout, "SAROO folder", folderPromptOnlyWhenNonEmpty: true, token: token);
+            if (decision == ReplaceDecision.No) { Info("[SKIP] SAROO folder"); EnsureRemoved(S_Work); return; }
+            if (decision == ReplaceDecision.Cancel) throw new OperationCanceledException();
+
             Info("Copying SAROO firmware...");
-            foreach (var fn in new[] { "cover.bin", "mcuapp.bin", "saroocfg.txt", "ssfirm.bin" })
-            {
-                token.ThrowIfCancellationRequested();
-                var src = Path.Combine(srcSaroo, fn);
-                var dst = Path.Combine(sarooBase, fn);
-                if (File.Exists(src))
-                {
-                    var d = ConfirmReplaceCountdown(dst, OverwriteTimeout, $"SAROO {fn}", token: token);
-                    if (d == ReplaceDecision.Yes) await RoboCopyFile(src, sarooBase, token);
-                    else if (d == ReplaceDecision.No) Info($"[SKIP] {fn}");
-                    else throw new OperationCanceledException();
-                }
-            }
+            token.ThrowIfCancellationRequested();
+            await RoboCopyDir(srcSaroo, sarooBase, token);
 
             if (expected.All(File.Exists))
             {
