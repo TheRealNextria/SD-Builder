@@ -119,11 +119,11 @@ namespace SDBuilderWin
                     string serialIp = ExtractAscii(ip, 0x40, 10);
                     if (!string.IsNullOrWhiteSpace(nameIp)) name = nameIp.Trim();
                     if (!string.IsNullOrWhiteSpace(serialIp)) serial = serialIp.Trim().ToUpperInvariant();
-                    
+
                     // Serial cleanup: remove hyphens and non-alphanumeric chars
                     if (!string.IsNullOrWhiteSpace(serial))
                     {
-                    serial = Regex.Replace(serial, @"[^A-Z0-9]", "");
+                        serial = Regex.Replace(serial, @"[^A-Z0-9]", "");
                     }
 
                     // Version: scan 0x40..0x60 for Vx.xxx, else fallback to regex scan
@@ -218,133 +218,133 @@ namespace SDBuilderWin
 
 
 
-// ASCII sanitize + word-safe 32-char trim for title
+                // ASCII sanitize + word-safe 32-char trim for title
 
 
-{
+                {
 
 
-    // Remove diacritics
+                    // Remove diacritics
 
 
-    string __norm = (name ?? string.Empty).Normalize(System.Text.NormalizationForm.FormD);
+                    string __norm = (name ?? string.Empty).Normalize(System.Text.NormalizationForm.FormD);
 
 
-    var __sb = new System.Text.StringBuilder(__norm.Length);
+                    var __sb = new System.Text.StringBuilder(__norm.Length);
 
 
-    for (int __i = 0; __i < __norm.Length; __i++)
+                    for (int __i = 0; __i < __norm.Length; __i++)
 
 
-    {
+                    {
 
 
-        char __ch = __norm[__i];
+                        char __ch = __norm[__i];
 
 
-        var __cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(__ch);
+                        var __cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(__ch);
 
 
-        if (__cat != System.Globalization.UnicodeCategory.NonSpacingMark) __sb.Append(__ch);
+                        if (__cat != System.Globalization.UnicodeCategory.NonSpacingMark) __sb.Append(__ch);
 
 
-    }
+                    }
 
 
-    string __s = __sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
+                    string __s = __sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
 
 
-    // Keep only A–Z a–z 0–9 space underscore dash; collapse spaces
+                    // Keep only A–Z a–z 0–9 space underscore dash; collapse spaces
 
 
-    var __out = new System.Text.StringBuilder(__s.Length);
+                    var __out = new System.Text.StringBuilder(__s.Length);
 
 
-    bool __lastSpace = false;
+                    bool __lastSpace = false;
 
 
-    for (int __i = 0; __i < __s.Length; __i++)
+                    for (int __i = 0; __i < __s.Length; __i++)
 
 
-    {
+                    {
 
 
-        char __ch = __s[__i];
+                        char __ch = __s[__i];
 
 
-        bool __ok = (__ch >= 'A' && __ch <= 'Z') || (__ch >= 'a' && __ch <= 'z') || (__ch >= '0' && __ch <= '9') || __ch == '_' || __ch == '-' || __ch == ' ';
+                        bool __ok = (__ch >= 'A' && __ch <= 'Z') || (__ch >= 'a' && __ch <= 'z') || (__ch >= '0' && __ch <= '9') || __ch == '_' || __ch == '-' || __ch == ' ';
 
 
-        if (!__ok) __ch = ' ';
+                        if (!__ok) __ch = ' ';
 
 
-        if (__ch == ' ')
+                        if (__ch == ' ')
 
 
-        {
+                        {
 
 
-            if (__lastSpace) continue;
+                            if (__lastSpace) continue;
 
 
-            __lastSpace = true;
+                            __lastSpace = true;
 
 
-            __out.Append(' ');
+                            __out.Append(' ');
 
 
-        }
+                        }
 
 
-        else
+                        else
 
 
-        {
+                        {
 
 
-            __lastSpace = false;
+                            __lastSpace = false;
 
 
-            __out.Append(__ch);
+                            __out.Append(__ch);
 
 
-        }
+                        }
 
 
-    }
+                    }
 
 
-    name = __out.ToString().Trim();
+                    name = __out.ToString().Trim();
 
 
-    if (string.IsNullOrWhiteSpace(name)) name = "UNKNOWN";
+                    if (string.IsNullOrWhiteSpace(name)) name = "UNKNOWN";
 
 
-    // Word-safe 32-char trim
+                    // Word-safe 32-char trim
 
 
-    int __maxNameLen = 32;
+                    int __maxNameLen = 32;
 
 
-    if (name.Length > __maxNameLen)
+                    if (name.Length > __maxNameLen)
 
 
-    {
+                    {
 
 
-        int cut = name.LastIndexOf(' ', __maxNameLen);
+                        int cut = name.LastIndexOf(' ', __maxNameLen);
 
 
-        if (cut > 0) name = name.Substring(0, cut);
+                        if (cut > 0) name = name.Substring(0, cut);
 
 
-        else name = name.Substring(0, __maxNameLen);
+                        else name = name.Substring(0, __maxNameLen);
 
 
-    }
+                    }
 
 
-}
+                }
 
 
                 var linesOut = new System.Collections.Generic.List<string>()
@@ -360,7 +360,7 @@ namespace SDBuilderWin
                 string content = string.Join("\r\n", linesOut) + "\r\n";
 
                 string pathFinal = Path.Combine(dcIndexFolder, "info" + nn + ".txt");
-                string pathTemp  = pathFinal + ".tmp";
+                string pathTemp = pathFinal + ".tmp";
 
                 if (File.Exists(pathFinal))
                 {

@@ -2108,7 +2108,7 @@ private ListView lvList;
             btnDcRebuildList.Name = "btnDcRebuildList";
             btnDcRebuildList.Size = new Size(82, 25);
             btnDcRebuildList.TabIndex = 9;
-            btnDcRebuildList.Text = "Rebuild List";
+            btnDcRebuildList.Text = "Preview List";
             btnDcRebuildList.UseVisualStyleBackColor = true;
             btnDcRebuildList.Click += btnRebuildList_Click;
             // 
