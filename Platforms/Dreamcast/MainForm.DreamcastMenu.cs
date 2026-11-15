@@ -73,6 +73,32 @@ namespace SDBuilderWin
             });
         }
 
+        // "Install menu" button. Like GDMENUCardManager there is no prebuilt menu to copy:
+        // the menu is always generated from Tools\gdMenu / Tools\openMenu. An empty card gets an
+        // empty menu; games already on the card are listed straight away.
+        async Task InstallDreamcastMenuAsync(string d, CancellationToken token)
+        {
+            var sdRoot = $@"{d}:\";
+            var kind = ResolveDcMenuKind(sdRoot, askOnMismatch: true);
+            if (kind == null) { Info("[DC menu] Cancelled."); return; }
+
+            var dir01 = Path.Combine(sdRoot, "01");
+            var installed = DreamcastMenuBuilder.DetectInstalledMenu(sdRoot);
+            var question = installed != null
+                ? $"{installed} is already installed on {d}:\\01.\n\nReinstall {kind}? Games on the card stay where they are and are listed in the menu."
+                : $"Install {kind} to {d}:\\01?";
+            if (MessageBox.Show(this, question, "Install menu", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            SetDcStatus($"Installing {kind}…");
+            var builder = CreateDcMenuBuilder();
+            var result = await Task.Run(() => builder.BuildAndInstall(sdRoot, kind.Value, token), token);
+
+            Info($"[DC menu] {result.Kind} installed to {d}:\\01 ({result.GameCount} game(s) in the menu).");
+            SetDcStatus($"{result.Kind} installed with {result.GameCount} games.");
+            try { BeginInvoke(new Action(RefreshDreamcastList)); } catch { }
+        }
+
         async Task RebuildDreamcastMenuAsync(string d, CancellationToken token)
         {
             var sdRoot = $@"{d}:\";

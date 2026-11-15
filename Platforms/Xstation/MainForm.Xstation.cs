@@ -451,14 +451,14 @@ namespace SDBuilderWin
                         copied++;
                     }
 
-                    WaitEnterOrTimeout(CopyTimeout, token);
+                    CopyCooldown(token);
                 }
 
                 foreach (var d in dirs)
                 {
                     await CopyEntry(d, Platform.Xstation, destRoot, token);
                     copied++;
-                    WaitEnterOrTimeout(CopyTimeout, token);
+                    CopyCooldown(token);
                 }
             }
             else

@@ -29,112 +29,6 @@ namespace SDBuilderWin
         HashSet<string> _dcChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         System.Windows.Forms.Timer? _dcFilterDebounce;
         CancellationTokenSource? _dcScanCts;
-        // ===== Dreamcast Firmware ensure START =====
-        async Task EnsureDreamcastFirmwareSelectedAsync(string destDrive, CancellationToken token)
-        {
-            try
-            {
-                string appDir = AppContext.BaseDirectory;
-                string toolsDir = Path.Combine(appDir, "Tools");
-                bool useGd = rbDcGdMenu != null && rbDcGdMenu.Checked;
-                string zipName = useGd ? "GDmenu.zip" : "OpenMenu.zip";
-                string chosenName = useGd ? "GDmenu" : "OpenMenu";
-                string chosenZip = Path.Combine(toolsDir, zipName);
-
-                if (!Directory.Exists(toolsDir) || !File.Exists(chosenZip))
-                {
-                    Error($"'{zipName}' not found in Tools folder next to the EXE.");
-                    return;
-                }
-
-                string tempDir = Path.Combine(appDir, "temp_dreamcast_fw");
-                try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                Directory.CreateDirectory(tempDir);
-
-                Info($"Extracting {chosenName}...");
-                try { System.IO.Compression.ZipFile.ExtractToDirectory(chosenZip, tempDir); }
-                catch (Exception ex) { Error("Failed to extract ZIP: " + ex.Message); return; }
-
-                // Detect payload folder (supports both GDmenu and OpenMenu zips)
-                string? payload = null;
-                foreach (var name in new[] { "01", "menu_gdi", "menu_data" })
-                {
-                    var path = Path.Combine(tempDir, name);
-                    if (Directory.Exists(path)) { payload = path; break; }
-                }
-                if (payload == null)
-                {
-                    var dirs = Directory.GetDirectories(tempDir);
-                    if (dirs.Length == 1) payload = dirs[0];
-                }
-                if (payload == null) payload = tempDir;
-
-                var destRoot = $@"{destDrive}:\\";
-                var dest01 = Path.Combine(destRoot, "01");
-
-                if (Directory.Exists(dest01))
-                {
-                    var overwriteAns = MessageBox.Show(
-                        this,
-                        $"Folder '01' already exists on {destDrive}:. Overwrite its contents?",
-                        "Overwrite confirmation",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Warning
-                    );
-                    if (overwriteAns == DialogResult.No) return;
-                }
-
-                Info($"Installing {chosenName} to \\01 ...");
-                try
-                {
-                    if (Directory.Exists(dest01))
-                    {
-                        try { Directory.Delete(dest01, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                    }
-                    Directory.CreateDirectory(dest01);
-
-                    foreach (var dir in Directory.GetDirectories(payload, "*", SearchOption.TopDirectoryOnly))
-                        await RoboCopyDir(dir, dest01, token);
-                    foreach (var file in Directory.GetFiles(payload, "*", SearchOption.TopDirectoryOnly))
-                        await RoboCopyFile(file, dest01, token);
-
-                    Info($"{chosenName} installed to {destDrive}:\\01");
-
-                    // Ensure GDEMU.ini exists in SD root after GDmenu install
-                    try
-                    {
-                        if (string.Equals(chosenName, "GDmenu", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var sdRoot = $@"{destDrive}:\\";
-                            var gdemuIniPath = System.IO.Path.Combine(sdRoot, "GDEMU.ini");
-                            if (!System.IO.File.Exists(gdemuIniPath))
-                            {
-                                System.IO.File.WriteAllLines(gdemuIniPath, new[]
-                                {
-                            "open_time = 150",
-                            "detect_time = 150",
-                            "reset_goto = 1"
-                        });
-                                Info("Created default GDEMU.ini in SD root");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Warn("Failed to ensure GDEMU.ini: " + ex.Message);
-                    }
-
-                    SetDcStatus("Ready.");
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { Error("Dreamcast install failed: " + ex.Message); }
-                finally
-                {
-                    try { Directory.Delete(tempDir, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                }
-            }
-            catch (Exception ex) { Error("Dreamcast firmware error: " + ex.Message); }
-        }// ===== END Dreamcast Firmware ensure =====
 
 
 
@@ -576,7 +470,6 @@ namespace SDBuilderWin
                                 {
                                     var idxDup = existingSerials[srcSerial];
                                     Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial}, disc {dk})");
-                                    WaitEnterOrTimeout(CopyTimeout, token);
                                     if (token.IsCancellationRequested) return;
                                     continue;
                                 }
@@ -585,7 +478,6 @@ namespace SDBuilderWin
                             {
                                 var idxDup = existingSerials[srcSerial];
                                 Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial})");
-                                WaitEnterOrTimeout(CopyTimeout, token);
                                 if (token.IsCancellationRequested) return;
                                 continue;
                             }
@@ -666,7 +558,7 @@ namespace SDBuilderWin
                 }
 
                 try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                WaitEnterOrTimeout(CopyTimeout, token);
+                CopyCooldown(token);
             }
 
             Info("Dreamcast copy complete.");

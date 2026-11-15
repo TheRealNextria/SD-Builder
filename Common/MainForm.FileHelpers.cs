@@ -108,6 +108,29 @@ namespace SDBuilderWin
             }
         }
 
+        // ===== SD cool-down between games =====
+        // The pause is taken *before* the next write instead of after each game, so there is
+        // no pointless wait after the last game, after skipped games, or twice in a row.
+        bool _copyCooldownPending;
+
+        /// <summary>Call after a game has been written: the next write will first wait CopyTimeout seconds.</summary>
+        void CopyCooldown(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            _copyCooldownPending = true;
+        }
+
+        /// <summary>Called by the copy helpers right before they write; waits if a game was just written.</summary>
+        void WaitForCopyCooldown(CancellationToken token)
+        {
+            if (!_copyCooldownPending) return;
+            _copyCooldownPending = false;
+            if (CopyTimeout <= 0) return;
+            Info($"Cool-down: waiting {CopyTimeout}s before the next write…");
+            WaitEnterOrTimeout(CopyTimeout, token);
+            Info("Cool-down done, continuing.");
+        }
+
         // Countdown dialogs
         void WaitEnterOrTimeout(int seconds, CancellationToken token)
         {
@@ -228,12 +251,14 @@ namespace SDBuilderWin
         }
         async Task RoboCopyDir(string source, string dest, CancellationToken token)
         {
+            WaitForCopyCooldown(token);
             Directory.CreateDirectory(dest);
             var args = $"{Q(source)} {Q(dest)} {string.Join(" ", RoboFlagsDir)}";
             await RunProcess("robocopy.exe", args, token);
         }
         async Task RoboCopyFile(string srcFile, string destDir, CancellationToken token)
         {
+            WaitForCopyCooldown(token);
             Directory.CreateDirectory(destDir);
             var leaf = Path.GetFileName(srcFile);
             var srcDir = Path.GetDirectoryName(srcFile)!;

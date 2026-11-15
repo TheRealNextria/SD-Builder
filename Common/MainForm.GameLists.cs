@@ -70,21 +70,7 @@ namespace SDBuilderWin
                     case Platform.Xstation: await EnsureXstationFirmware(d, token); break;
                     case Platform.Saroo: await EnsureSarooFirmware(d, token); break;
                     case Platform.Gamecube: await EnsureGamecubeIPL(d, token); break;
-                    case Platform.Dreamcast:
-                        {
-                            bool useGd = (rbDcGdMenu != null && rbDcGdMenu.Checked);
-                            string chosenName = useGd ? "GDmenu" : "OpenMenu";
-                            var ans = MessageBox.Show(
-                                this,
-                                $"Do you want to install {chosenName} firmware to " + d + ":\01?",
-                                "Install firmware",
-                                MessageBoxButtons.YesNo,
-                                MessageBoxIcon.Question
-                            );
-                            if (ans != DialogResult.Yes) break;
-                            await EnsureDreamcastFirmwareSelectedAsync(d, token);
-                            break;
-                        }
+                    case Platform.Dreamcast: await InstallDreamcastMenuAsync(d, token); break;
 
                     case Platform.Summercart64: await EnsureSummercart64Firmware(d, token); break;
                 }
@@ -163,14 +149,12 @@ namespace SDBuilderWin
                                     if (setDiscs.Contains(dk) || System.Linq.Enumerable.Any(setDiscs, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase)))
                                     {
                                         Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1}, disc {2})", existingSerials[srcSerial], srcSerial, dk));
-                                        WaitEnterOrTimeout(CopyTimeout, token);
                                         continue;
                                     }
                                 }
                                 else if (setDiscs.Contains("1/1"))
                                 {
                                     Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1})", existingSerials[srcSerial], srcSerial));
-                                    WaitEnterOrTimeout(CopyTimeout, token);
                                     continue;
                                 }
                             }
@@ -219,7 +203,7 @@ namespace SDBuilderWin
                     catch { /* ignore */ }
 
                     try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                    WaitEnterOrTimeout(CopyTimeout, token);
+                    CopyCooldown(token);
                     try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
                     return;
                 }
@@ -248,7 +232,7 @@ namespace SDBuilderWin
                             File.Move(copied, target);
                         }
                         try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        WaitEnterOrTimeout(CopyTimeout, token);
+                        CopyCooldown(token);
                         try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
                         return;
                     }
@@ -269,7 +253,7 @@ namespace SDBuilderWin
                             File.Move(copied, target);
                         }
                         try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        WaitEnterOrTimeout(CopyTimeout, token);
+                        CopyCooldown(token);
                         try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
                         return;
                     }
@@ -283,7 +267,7 @@ namespace SDBuilderWin
                         Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
                         await RoboCopyFile(source, dcDest, token);
                         try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        WaitEnterOrTimeout(CopyTimeout, token);
+                        CopyCooldown(token);
                         try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
                         return;
                     }
@@ -313,7 +297,7 @@ namespace SDBuilderWin
                     Directory.CreateDirectory(dest);
                     Info($"Copying folder → '{name}' → {GetPlatformCopyLabel(platform)}");
                     await RoboCopyDir(source, dest, token);
-                    WaitEnterOrTimeout(CopyTimeout, token);
+                    CopyCooldown(token);
                     return;
                 }
                 else
@@ -329,7 +313,7 @@ namespace SDBuilderWin
                     Directory.CreateDirectory(dest);
                     Info($"Copying folder → '{Path.GetFileName(source.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))}' → {GetPlatformCopyLabel(platform)}");
                     await RoboCopyDir(source, dest, token);
-                    WaitEnterOrTimeout(CopyTimeout, token);
+                    CopyCooldown(token);
                     return;
                 }
             }
@@ -351,7 +335,7 @@ namespace SDBuilderWin
                 Info($"Copying file → '{leaf}'→ {GetPlatformCopyLabel(platform)}");
                 var dstDir = Path.GetDirectoryName(target)!;
                 await RoboCopyFile(source, dstDir, token);
-                WaitEnterOrTimeout(CopyTimeout, token);
+                CopyCooldown(token);
                 return;
             }
 
