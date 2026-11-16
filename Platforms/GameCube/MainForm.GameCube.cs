@@ -347,7 +347,7 @@ namespace SDBuilderWin
             if (MessageBox.Show(this, $"IPL.dol not found in:\n{gcBase}\n\nDownload Swiss now?", "Gamecube", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No) return;
 
             EnsureRemoved(G_Work); Directory.CreateDirectory(G_Work);
-            var latest = await GetLatestAssetUrlAsync(G_Owner, G_Repo, G_AssetPattern);
+            var latest = await GetLatestAssetUrlAsync(G_Owner, G_Repo, G_AssetPattern, token);
             var chosen = latest ?? G_Url;
             Info($"Resolved Swiss URL: {chosen}");
 

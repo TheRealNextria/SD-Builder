@@ -46,66 +46,70 @@ namespace SDBuilderWin
             return false;
         }
 
-        static async Task<string?> GetLatestAssetUrlAsync(string owner, string repo, string assetNamePattern, string? token = null)
+        /// <summary>
+        /// Download URL of the newest GitHub release asset whose name matches <paramref name="assetNamePattern"/>
+        /// (regex, case-insensitive). Looks at /releases/latest first, then at the 10 most recent releases
+        /// (a repo can publish other assets, e.g. a loader, as its latest release).
+        /// Returns null when nothing matches or GitHub cannot be reached; the reason is logged.
+        /// </summary>
+        async Task<string?> GetLatestAssetUrlAsync(string owner, string repo, string assetNamePattern, CancellationToken token)
         {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("SD-Builder/1.0");
+            http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+
+            string? FirstMatch(JsonElement release)
+            {
+                if (!release.TryGetProperty("assets", out var assets)) return null;
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.GetProperty("name").GetString() ?? string.Empty;
+                    if (Regex.IsMatch(name, assetNamePattern, RegexOptions.IgnoreCase))
+                        return asset.GetProperty("browser_download_url").GetString();
+                }
+                return null;
+            }
+
+            async Task<JsonDocument?> GetJson(string url, bool quietOn404 = false)
+            {
+                using var resp = await http.GetAsync(url, token);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    // /releases/latest is 404 when a repo has only pre-releases; the release list below still works.
+                    if (quietOn404 && resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+                    var why = resp.StatusCode == System.Net.HttpStatusCode.Forbidden || (int)resp.StatusCode == 429
+                        ? " (GitHub API rate limit, try again later)" : "";
+                    Warn($"GitHub {owner}/{repo}: HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}{why}");
+                    return null;
+                }
+                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(token));
+            }
+
             try
             {
-                using var http = new System.Net.Http.HttpClient();
-                http.Timeout = TimeSpan.FromSeconds(20);
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("SD-Builder/1.0");
-                if (!string.IsNullOrWhiteSpace(token))
+                using (var latest = await GetJson($"https://api.github.com/repos/{owner}/{repo}/releases/latest", quietOn404: true))
                 {
-                    http.DefaultRequestHeaders.Authorization =
-                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                    if (latest != null && FirstMatch(latest.RootElement) is string url) return url;
                 }
-
-                // Try /releases/latest first
-                var latestUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
-                using (var latestResp = await http.GetAsync(latestUrl))
+                using (var list = await GetJson($"https://api.github.com/repos/{owner}/{repo}/releases?per_page=10"))
                 {
-                    if (latestResp.IsSuccessStatusCode)
+                    if (list != null)
                     {
-                        var json = await latestResp.Content.ReadAsStringAsync();
-                        using var doc = System.Text.Json.JsonDocument.Parse(json);
-                        if (doc.RootElement.TryGetProperty("assets", out var assets))
+                        foreach (var rel in list.RootElement.EnumerateArray())
                         {
-                            foreach (var asset in assets.EnumerateArray())
-                            {
-                                var name = asset.GetProperty("name").GetString() ?? string.Empty;
-                                if (System.Text.RegularExpressions.Regex.IsMatch(name, assetNamePattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                                    return asset.GetProperty("browser_download_url").GetString();
-                            }
+                            if (rel.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
+                            if (rel.TryGetProperty("prerelease", out var p) && p.GetBoolean()) continue;
+                            if (FirstMatch(rel) is string url) return url;
                         }
+                        Warn($"GitHub {owner}/{repo}: no release asset matches '{assetNamePattern}'.");
                     }
                 }
-
-                // Fallback: list recent releases
-                var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=5";
-                using (var listResp = await http.GetAsync(listUrl))
-                {
-                    if (listResp.IsSuccessStatusCode)
-                    {
-                        var json = await listResp.Content.ReadAsStringAsync();
-                        using var doc = System.Text.Json.JsonDocument.Parse(json);
-                        foreach (var rel in doc.RootElement.EnumerateArray())
-                        {
-                            if (!rel.TryGetProperty("assets", out var assets)) continue;
-                            foreach (var asset in assets.EnumerateArray())
-                            {
-                                var name = asset.GetProperty("name").GetString() ?? string.Empty;
-                                if (System.Text.RegularExpressions.Regex.IsMatch(name, assetNamePattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                                    return asset.GetProperty("browser_download_url").GetString();
-                            }
-                        }
-                    }
-                }
-
-                return null;
             }
-            catch
-            {
-                return null;
-            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException) { Warn($"GitHub {owner}/{repo}: no answer within 20s."); }
+            catch (System.Net.Http.HttpRequestException ex) { Warn($"GitHub {owner}/{repo}: {ex.Message}"); }
+            catch (JsonException ex) { Warn($"GitHub {owner}/{repo}: unexpected answer ({ex.Message})."); }
+            return null;
         }
 
         // ===== SD cool-down between games =====

@@ -30,7 +30,11 @@ namespace SDBuilderWin
         CancellationTokenSource? _xsScanCts;
 
         // ---- URLs
+        // The newest update*.zip is looked up on GitHub; X_FW_Url is only used when that fails.
         const string X_FW_Url = "https://github.com/x-station/xstation-releases/releases/download/2.0.2/update202.zip";
+        const string X_Owner = "x-station";
+        const string X_Repo = "xstation-releases";
+        const string X_AssetPattern = @"^update\d+\.zip$";
 
         // Xstation temp
         string X_FW_Zip => Path.Combine(TempRoot, "xstation_fw.zip");
@@ -269,7 +273,10 @@ namespace SDBuilderWin
             if (MessageBox.Show(this, $"Xstation firmware missing in:\n{xstationDir}\n\nDownload now?", "Xstation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No) return;
 
             EnsureRemoved(TempRoot); Directory.CreateDirectory(TempRoot);
-            await DownloadFileAsync(X_FW_Url, X_FW_Zip, token);
+            var latest = await GetLatestAssetUrlAsync(X_Owner, X_Repo, X_AssetPattern, token);
+            var chosen = latest ?? X_FW_Url;
+            Info(latest != null ? $"Resolved Xstation URL: {chosen}" : $"Using fallback Xstation URL: {chosen}");
+            await DownloadFileAsync(chosen, X_FW_Zip, token);
             ExpandZip(X_FW_Zip, X_FW_Extract);
             Directory.CreateDirectory(xstationDir);
 
