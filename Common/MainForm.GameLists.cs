@@ -116,13 +116,7 @@ namespace SDBuilderWin
             Info($"Destination path: {destRoot}");
 
 
-            var existingSerials = platform == Platform.Dreamcast
-                ? IndexDcSerials(destRoot)
-                : new System.Collections.Generic.Dictionary<string, string>();
-
-            var existingSerialDiscs = platform == Platform.Dreamcast
-                ? IndexDcSerialDiscs(destRoot)
-                : new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
+            var dcIndex = platform == Platform.Dreamcast ? DcCardIndex.Read(destRoot) : null;
             if (!await ConfirmFreeSpaceAsync(destDrive, ReadListEntries(listPath), token)) return;
 
             foreach (var raw in File.ReadAllLines(listPath))
@@ -136,34 +130,8 @@ namespace SDBuilderWin
                 line = line.TrimEnd(' ', '.');
                 if (!File.Exists(line) && !Directory.Exists(line)) { Info($"[SKIP] Not found: \"{line}\""); continue; }
 
-                // Dreamcast duplicate-by-serial skip for Start (list)
-                if (platform == Platform.Dreamcast)
-                {
-                    try
-                    {
-                        if (TryExtractDcSerialFromSource(line, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
-                        {
-                            if (existingSerialDiscs.TryGetValue(srcSerial, out var setDiscs))
-                            {
-                                string dk;
-                                if (TryGuessDiscKey(System.IO.Path.GetFileName(line) ?? string.Empty, line, out dk))
-                                {
-                                    if (setDiscs.Contains(dk) || System.Linq.Enumerable.Any(setDiscs, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1}, disc {2})", existingSerials[srcSerial], srcSerial, dk));
-                                        continue;
-                                    }
-                                }
-                                else if (setDiscs.Contains("1/1"))
-                                {
-                                    Info(string.Format("[SKIP] Already present as \\\\{0} (serial {1})", existingSerials[srcSerial], srcSerial));
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                    catch { /* ignore */ }
-                }
+                // Dreamcast: skip games whose serial/disc is already on the card
+                if (dcIndex != null && IsDcGameAlreadyOnCard(line, dcIndex)) continue;
                 if (token.IsCancellationRequested) return;
                 await CopyEntry(line, platform, destRoot, token);
             }
@@ -175,108 +143,10 @@ namespace SDBuilderWin
             if (token.IsCancellationRequested) return;
             WaitForCopyCooldown(token); // pause for the previous game first, so the log below matches what is being written
 
-
-            // Dreamcast: always copy into next free 02..9999 index folder and rename disc
+            // Dreamcast: next free \02..9999 folder, disc.gdi/disc.cdi, name/serial/info files (Platforms\Dreamcast\MainForm.Dreamcast.Copy.cs)
             if (platform == Platform.Dreamcast)
             {
-                if (Directory.Exists(source))
-                {
-                    token.ThrowIfCancellationRequested();
-                    var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
-
-                    var name = new DirectoryInfo(source).Name;
-                    Info($"Copying Dreamcast folder → '{name}' → {Path.GetFileName(dcDest)}");
-                    await RoboCopyDir(source, dcDest, token);
-
-                    // Rename any top-level .gdi to disc.gdi
-                    try
-                    {
-                        var gdis = Directory.GetFiles(dcDest, "*.gdi", SearchOption.TopDirectoryOnly);
-                        if (gdis.Length > 0)
-                        {
-                            var gdiSrc = gdis[0];
-                            var gdiDst = Path.Combine(dcDest, "disc.gdi");
-                            if (!string.Equals(Path.GetFileName(gdiSrc), "disc.gdi", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (File.Exists(gdiDst)) File.Delete(gdiDst);
-                                File.Move(gdiSrc, gdiDst);
-                            }
-                        }
-                    }
-                    catch { /* ignore */ }
-
-                    try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                    CopyCooldown(token);
-                    try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                    return;
-                }
-                else if (File.Exists(source))
-                {
-                    token.ThrowIfCancellationRequested();
-                    var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
-
-                    var leaf = Path.GetFileName(source);
-                    var ext = Path.GetExtension(source).ToLowerInvariant();
-
-                    if (ext == ".cdi")
-                    {
-                        var target = Path.Combine(dcDest, "disc.cdi");
-                        var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
-                        if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
-                        if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
-
-                        Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(source, dcDest, token);
-
-                        var copied = Path.Combine(dcDest, leaf);
-                        if (!string.Equals(leaf, "disc.cdi", StringComparison.OrdinalIgnoreCase) && File.Exists(copied))
-                        {
-                            if (File.Exists(target)) File.Delete(target);
-                            File.Move(copied, target);
-                        }
-                        try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        CopyCooldown(token);
-                        try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                        return;
-                    }
-                    else if (ext == ".gdi")
-                    {
-                        var target = Path.Combine(dcDest, "disc.gdi");
-                        var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
-                        if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
-                        if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
-
-                        Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(source, dcDest, token);
-
-                        var copied = Path.Combine(dcDest, leaf);
-                        if (!string.Equals(leaf, "disc.gdi", StringComparison.OrdinalIgnoreCase) && File.Exists(copied))
-                        {
-                            if (File.Exists(target)) File.Delete(target);
-                            File.Move(copied, target);
-                        }
-                        try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        CopyCooldown(token);
-                        try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                        return;
-                    }
-                    else
-                    {
-                        var target = Path.Combine(dcDest, leaf);
-                        var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
-                        if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
-                        if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
-
-                        Info($"Copying file → '{leaf}' → Dreamcast → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(source, dcDest, token);
-                        try { { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } } } catch { { /* ignore */ } }
-                        CopyCooldown(token);
-                        try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                        return;
-                    }
-                }
-
-                Info($"[SKIP] Not found: '{source}'");
+                await CopyDreamcastGameAsync(source, destRoot, token);
                 return;
             }
 

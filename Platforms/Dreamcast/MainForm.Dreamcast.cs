@@ -425,8 +425,6 @@ namespace SDBuilderWin
         async Task CopyDreamcastCheckedAsync(string destDrive, CancellationToken token)
         {
             var destRoot = $@"{destDrive}:\";
-            var existingSerials = IndexDcSerials(destRoot);
-            var existingSerialDiscs = IndexDcSerialDiscs(destRoot);
             Directory.CreateDirectory(destRoot);
 
             // Build sources: group by parent folder in Files mode so one game = one index
@@ -456,111 +454,12 @@ namespace SDBuilderWin
 
             if (!await ConfirmFreeSpaceAsync(destDrive, sources, token)) return;
 
+            var dcIndex = DcCardIndex.Read(destRoot);
             foreach (var path in sources)
             {
-
-                try
-                {
-                    if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
-                    {
-                        if (existingSerialDiscs.TryGetValue(srcSerial, out var setDiscs))
-                        {
-                            string dk;
-                            if (TryGuessDiscKey(System.IO.Path.GetFileName(path) ?? string.Empty, path, out dk))
-                            {
-                                if (setDiscs.Contains(dk) || System.Linq.Enumerable.Any(setDiscs, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase)))
-                                {
-                                    var idxDup = existingSerials[srcSerial];
-                                    Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial}, disc {dk})");
-                                    if (token.IsCancellationRequested) return;
-                                    continue;
-                                }
-                            }
-                            else if (setDiscs.Contains("1/1"))
-                            {
-                                var idxDup = existingSerials[srcSerial];
-                                Info($"[SKIP] Already present as \\{idxDup} (serial {srcSerial})");
-                                if (token.IsCancellationRequested) return;
-                                continue;
-                            }
-                        }
-                    }
-                }
-                catch { /* ignore */ }
-                WaitForCopyCooldown(token); // pause for the previous game before starting (and logging) this one
                 token.ThrowIfCancellationRequested();
-                var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
-
-                if (Directory.Exists(path))
-                {
-                    Info($"Copying Dreamcast folder → '{Path.GetFileName(path)}' → {Path.GetFileName(dcDest)}");
-                    await RoboCopyDir(path, dcDest, token);
-
-                    // Rename top-level .gdi to disc.gdi
-                    try
-                    {
-                        var gdis = Directory.GetFiles(dcDest, "*.gdi", SearchOption.TopDirectoryOnly);
-                        if (gdis.Length > 0)
-                        {
-                            var gdiSrc = gdis[0];
-                            var gdiDst = Path.Combine(dcDest, "disc.gdi");
-                            if (!string.Equals(Path.GetFileName(gdiSrc), "disc.gdi", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (File.Exists(gdiDst)) File.Delete(gdiDst);
-                                File.Move(gdiSrc, gdiDst);
-                            }
-                        }
-                    }
-                    catch { /* ignore */ }
-                }
-                else if (File.Exists(path))
-                {
-                    var ext = Path.GetExtension(path).ToLowerInvariant();
-                    var leaf = Path.GetFileName(path);
-                    if (ext == ".cdi")
-                    {
-                        Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(path, dcDest, token);
-                        var srcLeaf = Path.GetFileName(path);
-                        var srcPath = Path.Combine(dcDest, srcLeaf);
-                        var dstPath = Path.Combine(dcDest, "disc.cdi");
-                        try
-                        {
-                            if (!string.Equals(srcLeaf, "disc.cdi", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (File.Exists(dstPath)) File.Delete(dstPath);
-                                if (File.Exists(srcPath)) File.Move(srcPath, dstPath);
-                            }
-                        }
-                        catch { /* ignore */ }
-                    }
-                    else if (ext == ".gdi")
-                    {
-                        Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(path, dcDest, token);
-                        var srcLeaf = Path.GetFileName(path);
-                        var srcPath = Path.Combine(dcDest, srcLeaf);
-                        var dstPath = Path.Combine(dcDest, "disc.gdi");
-                        try
-                        {
-                            if (!string.Equals(srcLeaf, "disc.gdi", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (File.Exists(dstPath)) File.Delete(dstPath);
-                                if (File.Exists(srcPath)) File.Move(srcPath, dstPath);
-                            }
-                        }
-                        catch { /* ignore */ }
-                    }
-                    else
-                    {
-                        // Other single files: copy as-is into the index folder
-                        Info($"Copying Dreamcast file → '{leaf}' → {Path.GetFileName(dcDest)}");
-                        await RoboCopyFile(path, dcDest, token);
-                    }
-                }
-
-                try { if (TryExtractDcIpMetadata(dcDest, out var t, out var sn)) { if (!string.IsNullOrWhiteSpace(t)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(t)); try { WriteDcInfoFile(dcDest, t, sn); } catch { } if (!string.IsNullOrWhiteSpace(sn)) System.IO.File.WriteAllText(System.IO.Path.Combine(dcDest, "serial.txt"), sn); try { WriteDcInfoFile(dcDest, t, sn); } catch { } } } catch { /* ignore */ }
-                CopyCooldown(token);
+                if (IsDcGameAlreadyOnCard(path, dcIndex)) continue;
+                await CopyDreamcastGameAsync(path, destRoot, token);
             }
 
             Info("Dreamcast copy complete.");
