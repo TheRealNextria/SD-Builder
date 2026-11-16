@@ -24,10 +24,10 @@ namespace SDBuilderWin
         {
             Directory.CreateDirectory(destRoot);
             int copied = 0;
-            if (!await ConfirmFreeSpaceAsync(destDrive, CheckedPaths(list), token)) return;
 
             if (!filesMode)
             {
+                if (!await ConfirmFreeSpaceAsync(destDrive, CheckedPaths(list), token)) return;
                 foreach (var path in CheckedPaths(list))
                 {
                     if (!File.Exists(path) && !Directory.Exists(path)) { Info($"[SKIP] Not found: \"{path}\""); continue; }
@@ -46,8 +46,12 @@ namespace SDBuilderWin
             }
             if (selected.Count == 0) { Warn("No items checked."); return; }
 
-            var groups = GroupDiscFiles(selected.Where(File.Exists));
+            // Grouping reads the .cue files (often on a network share), so do it off the UI thread.
+            var groups = await Task.Run(() => GroupDiscFiles(selected.Where(File.Exists)), token);
             var dirs = selected.Where(Directory.Exists).ToList();
+
+            // Count what is really copied: one checked .bin brings its .cue and the other tracks along.
+            if (!await ConfirmFreeSpaceAsync(destDrive, groups.Values.SelectMany(m => m).Concat(dirs), token)) return;
             var destLabel = DestinationLabel(destDrive, destRoot);
 
             foreach (var (groupName, members) in groups.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase).Select(kv => (kv.Key, kv.Value)))
