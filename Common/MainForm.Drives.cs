@@ -124,6 +124,7 @@ namespace SDBuilderWin
             using var cts = new CancellationTokenSource();
             _cts = cts;
             _copyCooldownPending = false; // a new job never inherits a pause from the previous one
+            _dcGameFolderInProgress = null;
             btnStop.Enabled = true; btnEject.Enabled = false; btnOpen.Enabled = false;
 
             try { await action(d, cts.Token); Info("Done."); }

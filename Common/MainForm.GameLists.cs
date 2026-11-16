@@ -123,6 +123,8 @@ namespace SDBuilderWin
             var existingSerialDiscs = platform == Platform.Dreamcast
                 ? IndexDcSerialDiscs(destRoot)
                 : new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
+            if (!await ConfirmFreeSpaceAsync(destDrive, ReadListEntries(listPath), token)) return;
+
             foreach (var raw in File.ReadAllLines(listPath))
             {
                 token.ThrowIfCancellationRequested();
@@ -171,6 +173,7 @@ namespace SDBuilderWin
         async Task CopyEntry(string source, Platform platform, string destRoot, CancellationToken token)
         {
             if (token.IsCancellationRequested) return;
+            WaitForCopyCooldown(token); // pause for the previous game first, so the log below matches what is being written
 
 
             // Dreamcast: always copy into next free 02..9999 index folder and rename disc
@@ -178,8 +181,8 @@ namespace SDBuilderWin
             {
                 if (Directory.Exists(source))
                 {
-                    var dcDest = NextDreamcastIndexFolder(destRoot);
-                    Directory.CreateDirectory(dcDest);
+                    token.ThrowIfCancellationRequested();
+                    var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
 
                     var name = new DirectoryInfo(source).Name;
                     Info($"Copying Dreamcast folder → '{name}' → {Path.GetFileName(dcDest)}");
@@ -209,8 +212,8 @@ namespace SDBuilderWin
                 }
                 else if (File.Exists(source))
                 {
-                    var dcDest = NextDreamcastIndexFolder(destRoot);
-                    Directory.CreateDirectory(dcDest);
+                    token.ThrowIfCancellationRequested();
+                    var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
 
                     var leaf = Path.GetFileName(source);
                     var ext = Path.GetExtension(source).ToLowerInvariant();

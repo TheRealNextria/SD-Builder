@@ -302,6 +302,7 @@ namespace SDBuilderWin
             string destRoot = $@"{destDrive}:\Saroo\ISO\";
             Directory.CreateDirectory(destRoot);
             int copied = 0;
+            if (!await ConfirmFreeSpaceAsync(destDrive, CheckedPaths(lvSrList), token)) return;
 
             if (rbSrFiles.Checked)
             {
@@ -424,6 +425,7 @@ namespace SDBuilderWin
                             : labeled;
                         destLabel = string.IsNullOrEmpty(rel) ? "Root" : rel.TrimEnd('\\');
                     }
+                    WaitForCopyCooldown(token); // pause for the previous game before starting (and logging) this one
                     Info($"Copying Game Files \u2192 '{kv.Key}' \u2192 {destLabel}");
 
                     var groupName = kv.Key;

@@ -276,6 +276,7 @@ namespace SDBuilderWin
             string destRoot = $@"{destDrive}:\Games";
             Directory.CreateDirectory(destRoot);
             int copied = 0;
+            if (!await ConfirmFreeSpaceAsync(destDrive, CheckedPaths(lvGcList), token)) return;
 
             foreach (ListViewItem it in lvGcList.Items)
             {

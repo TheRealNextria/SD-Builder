@@ -289,6 +289,7 @@ namespace SDBuilderWin
             string destRoot = $@"{destDrive}:\Roms";
             Directory.CreateDirectory(destRoot);
             int copied = 0;
+            if (!await ConfirmFreeSpaceAsync(destDrive, CheckedPaths(lvScList), token)) return;
 
             foreach (ListViewItem it in lvScList.Items)
             {

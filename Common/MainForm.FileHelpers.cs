@@ -118,6 +118,7 @@ namespace SDBuilderWin
         {
             token.ThrowIfCancellationRequested();
             _copyCooldownPending = true;
+            _dcGameFolderInProgress = null; // game complete, keep its folder
         }
 
         /// <summary>Called by the copy helpers right before they write; waits if a game was just written.</summary>
@@ -238,7 +239,10 @@ namespace SDBuilderWin
             ZipFile.ExtractToDirectory(zipPath, dest);
         }
         void EnsureRemoved(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); else if (File.Exists(path)) File.Delete(path); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } }
-        async Task<int> RunProcess(string exe, string args, CancellationToken token)
+        async Task<int> RunProcess(string exe, string args, CancellationToken token) =>
+            (await RunProcessCapture(exe, args, token)).ExitCode;
+
+        async Task<(int ExitCode, string StdOut, string StdErr)> RunProcessCapture(string exe, string args, CancellationToken token)
         {
             var psi = new ProcessStartInfo { FileName = exe, Arguments = args, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
             using var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -247,14 +251,152 @@ namespace SDBuilderWin
             var se = p.StandardError.ReadToEndAsync();
             try { await p.WaitForExitAsync(token); }
             catch (OperationCanceledException) { try { if (!p.HasExited) p.Kill(entireProcessTree: true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } throw; }
-            return p.ExitCode;
+            return (p.ExitCode, await so, await se);
         }
+
+        // ===== robocopy with result check =====
+        // robocopy exit codes are bit flags: 0-7 = success (1 = copied, 2 = extra files, 4 = mismatches),
+        // 8 = some files could not be copied, 16 = fatal error (no files copied). Anything >= 8 is a failure.
+
+        /// <summary>A copy to the card failed (card full, card removed, source unreachable, ...).</summary>
+        sealed class CopyFailedException : IOException
+        {
+            public CopyFailedException(string message) : base(message) { }
+        }
+
+        // Dreamcast game folder (\NN) created for the game being copied right now; removed again if that copy fails,
+        // so a half-copied game never ends up in the menu. Cleared once the game is complete (CopyCooldown).
+        string? _dcGameFolderInProgress;
+
+        string CreateDcGameFolder(string destRoot)
+        {
+            var dir = NextDreamcastIndexFolder(destRoot);
+            Directory.CreateDirectory(dir);
+            _dcGameFolderInProgress = dir;
+            return dir;
+        }
+
+        async Task RunRobocopy(string args, string what, string? partialFile, CancellationToken token)
+        {
+            var (code, stdout, stderr) = await RunProcessCapture("robocopy.exe", args, token);
+            if (code < 8) return;
+
+            // With /NJH /NJS /NFL /NDL only problems are printed; keep the ERROR lines and the reason line after each.
+            var lines = (stdout + "\n" + stderr).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+            var details = new List<string>();
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (!lines[i].Contains("ERROR", StringComparison.OrdinalIgnoreCase)) continue;
+                details.Add(lines[i]);
+                if (i + 1 < lines.Count && !lines[i + 1].Contains("ERROR", StringComparison.OrdinalIgnoreCase)) details.Add(lines[i + 1]);
+            }
+            foreach (var d in details.Distinct().Take(6)) Error("  robocopy: " + d);
+
+            if (partialFile != null) { try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch (Exception ex) { Warn("Could not remove partial file: " + ex.Message); } }
+            if (_dcGameFolderInProgress != null)
+            {
+                var dir = _dcGameFolderInProgress;
+                _dcGameFolderInProgress = null;
+                try { if (Directory.Exists(dir)) { Directory.Delete(dir, true); Warn($"Removed incomplete Dreamcast folder \\{Path.GetFileName(dir)}"); } }
+                catch (Exception ex) { Warn($"Could not remove incomplete folder \\{Path.GetFileName(dir)}: " + ex.Message); }
+            }
+
+            var reason = (code & 16) != 0 ? "fatal error, nothing was copied" : "some files could not be copied";
+            throw new CopyFailedException($"Copy failed for '{what}' (robocopy exit {code}: {reason}). Remaining items were not copied.");
+        }
+
+        // ===== Free space check before a copy job =====
+
+        /// <summary>
+        /// Adds up the selected sources and compares that with the free space on the card.
+        /// Returns false when there is not enough room and the user chooses not to continue.
+        /// The total is an upper bound: games that are skipped later (already on the card) are counted too.
+        /// </summary>
+        async Task<bool> ConfirmFreeSpaceAsync(string destDrive, IEnumerable<string> sources, CancellationToken token)
+        {
+            var list = sources.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (list.Count == 0) return true;
+
+            long free;
+            try { free = new DriveInfo(destDrive + @":\").AvailableFreeSpace; }
+            catch (Exception ex) { Warn("Could not read free space: " + ex.Message); return true; }
+
+            // Sizes come from the source (often a network share), so read them off the UI thread.
+            long need = await Task.Run(() =>
+            {
+                // Count every file once, even when e.g. both a .cue and its .bin are checked.
+                var files = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                foreach (var s in list) CollectSourceFiles(s, files, token);
+                return files.Values.Sum();
+            }, token);
+            const long Margin = 16L * 1024 * 1024; // room for name.txt / info files / FAT overhead
+            Info($"Selected: {FormatSize(need)} — free on {destDrive}: {FormatSize(free)}");
+            if (need + Margin <= free) return true;
+
+            var ans = MessageBox.Show(this,
+                $"Not enough free space on {destDrive}:\n\n" +
+                $"Selected: {FormatSize(need)}\nFree: {FormatSize(free)}\nShort: {FormatSize(need + Margin - free)}\n\n" +
+                "Games that are already on the card are counted too, so it may still fit.\n" +
+                "Copy anyway? It stops with an error as soon as the card is full.",
+                "Not enough space", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (ans == DialogResult.Yes) return true;
+            Warn("Copy not started: not enough free space.");
+            return false;
+        }
+
+        static List<string> CheckedPaths(ListView lv) =>
+            lv.Items.Cast<ListViewItem>().Where(i => i.Checked).Select(i => i.Text).ToList();
+
+        /// <summary>Paths in a game list .txt, parsed the same way ReadListAndCopy does (comments and quotes stripped).</summary>
+        static List<string> ReadListEntries(string listPath)
+        {
+            var result = new List<string>();
+            foreach (var raw in File.ReadAllLines(listPath))
+            {
+                var line = raw?.Trim() ?? "";
+                if (line.Length == 0 || Regex.IsMatch(line, @"^\s*(#|;|//|::|REM\b)")) continue;
+                if (line.StartsWith("\"") && line.EndsWith("\"") && line.Length >= 2) line = line[1..^1];
+                result.Add(line.TrimEnd(' ', '.'));
+            }
+            return result;
+        }
+
+        static void CollectSourceFiles(string path, Dictionary<string, long> files, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    foreach (var f in new DirectoryInfo(path).EnumerateFiles("*", SearchOption.AllDirectories))
+                        files[f.FullName] = f.Length;
+                    return;
+                }
+                if (!File.Exists(path)) return;
+                files[Path.GetFullPath(path)] = new FileInfo(path).Length;
+
+                // A .cue is copied together with the tracks it lists.
+                if (path.EndsWith(".cue", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dir = Path.GetDirectoryName(path) ?? "";
+                    foreach (Match m in Regex.Matches(File.ReadAllText(path), "^\\s*FILE\\s+\"([^\"]+)\"", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+                    {
+                        var track = Path.GetFullPath(Path.Combine(dir, m.Groups[1].Value));
+                        if (File.Exists(track)) files[track] = new FileInfo(track).Length;
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         async Task RoboCopyDir(string source, string dest, CancellationToken token)
         {
             WaitForCopyCooldown(token);
             Directory.CreateDirectory(dest);
             var args = $"{Q(source)} {Q(dest)} {string.Join(" ", RoboFlagsDir)}";
-            await RunProcess("robocopy.exe", args, token);
+            await RunRobocopy(args, Path.GetFileName(source.TrimEnd('\\', '/')), partialFile: null, token);
         }
         async Task RoboCopyFile(string srcFile, string destDir, CancellationToken token)
         {
@@ -263,7 +405,9 @@ namespace SDBuilderWin
             var leaf = Path.GetFileName(srcFile);
             var srcDir = Path.GetDirectoryName(srcFile)!;
             var args = $"{Q(srcDir)} {Q(destDir)} {Q(leaf)} {string.Join(" ", RoboFlagsFile)}";
-            await RunProcess("robocopy.exe", args, token);
+            // Only a file this copy created may be removed on failure; an existing copy on the card is never deleted.
+            var target = Path.Combine(destDir, leaf);
+            await RunRobocopy(args, leaf, partialFile: File.Exists(target) ? null : target, token);
         }
         static int IndexOf(byte[] hay, byte[] needle)
         {

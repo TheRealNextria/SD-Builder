@@ -454,6 +454,8 @@ namespace SDBuilderWin
                 }
             }
 
+            if (!await ConfirmFreeSpaceAsync(destDrive, sources, token)) return;
+
             foreach (var path in sources)
             {
 
@@ -485,9 +487,9 @@ namespace SDBuilderWin
                     }
                 }
                 catch { /* ignore */ }
-                var dcDest = NextDreamcastIndexFolder(destRoot); // always next free 01..9999
+                WaitForCopyCooldown(token); // pause for the previous game before starting (and logging) this one
                 token.ThrowIfCancellationRequested();
-                Directory.CreateDirectory(dcDest);
+                var dcDest = CreateDcGameFolder(destRoot); // next free 02..9999; removed again if the copy fails
 
                 if (Directory.Exists(path))
                 {
