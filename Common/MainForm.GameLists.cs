@@ -1,0 +1,245 @@
+﻿// Version: v2.31 - Master + Summercart64_64DDIPL (Designer refactor)
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Net.Http;
+using Microsoft.Win32.SafeHandles;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+#nullable enable
+
+namespace SDBuilderWin
+{
+    public sealed partial class MainForm
+    {
+        System.Windows.Forms.Timer? _glPoll;
+        string _glLastSig = string.Empty;
+        FileSystemWatcher? _glWatcher;
+        System.Windows.Forms.Timer? _glDebounce;
+        void RefreshAllGameLists()
+        {
+            // PopulateListCombo logs its own read errors.
+            PopulateListCombo(cmbXstationList);
+            PopulateListCombo(cmbSarooList);
+            PopulateListCombo(cmbGamecubeList);
+            PopulateListCombo(cmbDreamcastList);
+            PopulateListCombo(cmbSC64List);
+        }
+
+
+        string GetGameListsSignature()
+        {
+            try
+            {
+                if (!Directory.Exists(GameListsDir)) return "";
+                var files = Directory.EnumerateFiles(GameListsDir, "*.txt", SearchOption.TopDirectoryOnly)
+                                     .Select(p => new FileInfo(p))
+                                     .Select(fi => $"{fi.Name}|{fi.Length}|{fi.LastWriteTimeUtc.Ticks}")
+                                     .OrderBy(x => x);
+                return string.Join(";", files);
+            }
+            // Polled every few seconds: a folder that cannot be read just means "no change detected";
+            // PopulateListCombo reports the error when the lists are refreshed.
+            catch (IOException) { return ""; }
+            catch (UnauthorizedAccessException) { return ""; }
+        }
+
+        void WirePlatformTab(
+            Platform p,
+            Button btnFw, ComboBox cmbList, Button btnRefreshLists, Button btnOpenLists, Button btnStart,
+            Button? btnInstall64DD, Button? btnInstallEmu)
+        {
+            btnRefreshLists.Click += (_, __) => { PopulateListCombo(cmbList); btnStart.Enabled = cmbList.Items.Count > 0; };
+            cmbList.SelectedIndexChanged += (_, __) => btnStart.Enabled = cmbList.SelectedIndex >= 0;
+            btnOpenLists.Click += (_, __) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{GameListsDir}\"") { UseShellExecute = true });
+
+            PopulateListCombo(cmbList);
+            btnStart.Enabled = cmbList.Items.Count > 0;
+
+            btnFw.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+            {
+                switch (p)
+                {
+                    case Platform.Xstation: await EnsureXstationFirmware(d, token); break;
+                    case Platform.Saroo: await EnsureSarooFirmware(d, token); break;
+                    case Platform.Gamecube: await EnsureGamecubeIPL(d, token); break;
+                    case Platform.Dreamcast: await InstallDreamcastMenuAsync(d, token); break;
+
+                    case Platform.Summercart64: await EnsureSummercart64Firmware(d, token); break;
+                }
+            });
+
+            btnStart.Click += async (_, __) =>
+            {
+                var list = GetSelectedListPath(cmbList);
+                if (list == null) { Warn("No list selected."); return; }
+                await WithDriveJobAsync((d, token) => ReadListAndCopy(list, p, d, token));
+            };
+
+            if (p == Platform.Summercart64 && btnInstall64DD != null && btnInstallEmu != null)
+            {
+                btnInstall64DD.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+                {
+                    await InstallSummercart64Ipl(d, token);
+                });
+                btnInstallEmu.Click += async (_, __) => await WithDriveJobAsync(async (d, token) =>
+                {
+                    await InstallSummercart64Emulators(d, token);
+                });
+            }
+        }
+
+
+
+        // List-driven copy
+        async Task ReadListAndCopy(string listPath, Platform platform, string destDrive, CancellationToken token)
+        {
+            if (!File.Exists(listPath)) throw new Exception($"List file not found: {listPath}");
+
+            string destRoot = platform switch
+            {
+                Platform.Xstation => $@"{destDrive}:\",
+                Platform.Saroo => $@"{destDrive}:\SAROO\ISO",
+                Platform.Gamecube => $@"{destDrive}:\Games",
+                Platform.Summercart64 => $@"{destDrive}:\Roms",
+                Platform.Dreamcast => $@"{destDrive}:\",
+                _ => throw new InvalidOperationException()
+            };
+            Directory.CreateDirectory(destRoot);
+            Info($"Destination path: {destRoot}");
+
+
+            var dcIndex = platform == Platform.Dreamcast ? await ReadDcCardIndexAsync(destRoot, token) : null;
+            if (!await ConfirmFreeSpaceAsync(destDrive, ReadListEntries(listPath), token)) return;
+
+            foreach (var raw in File.ReadAllLines(listPath))
+            {
+                token.ThrowIfCancellationRequested();
+                if (raw == null) continue;
+                var line = raw.Trim();
+                if (line.Length == 0) continue;
+                if (Regex.IsMatch(line, @"^\s*(#|;|//|::|REM\b)")) continue;
+                if (line.StartsWith("\"") && line.EndsWith("\"") && line.Length >= 2) line = line[1..^1];
+                line = line.TrimEnd(' ', '.');
+                if (!File.Exists(line) && !Directory.Exists(line)) { Info($"[SKIP] Not found: \"{line}\""); continue; }
+
+                // Dreamcast: skip games whose serial/disc is already on the card
+                if (dcIndex != null && await IsDcGameAlreadyOnCardAsync(line, dcIndex, token)) continue;
+                if (token.IsCancellationRequested) return;
+                await CopyEntry(line, platform, destRoot, token);
+            }
+            Info("All entries processed.");
+        }
+
+        async Task CopyEntry(string source, Platform platform, string destRoot, CancellationToken token)
+        {
+            if (token.IsCancellationRequested) return;
+            WaitForCopyCooldown(token); // pause for the previous game first, so the log below matches what is being written
+
+            // Dreamcast: next free \02..9999 folder, disc.gdi/disc.cdi, name/serial/info files (Platforms\Dreamcast\MainForm.Dreamcast.Copy.cs)
+            if (platform == Platform.Dreamcast)
+            {
+                await CopyDreamcastGameAsync(source, destRoot, token);
+                return;
+            }
+
+
+
+
+
+            if (Directory.Exists(source))
+            {
+                var name = new DirectoryInfo(source).Name;
+                if (platform == Platform.Gamecube)
+                {
+                    var dest = Path.Combine(destRoot, name);
+                    bool needsPrompt = Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any();
+                    if (needsPrompt)
+                    {
+                        var d = ConfirmReplaceCountdown(dest, OverwriteTimeout, $"Folder \'{name}\'", folderPromptOnlyWhenNonEmpty: true, token: token);
+                        if (d == ReplaceDecision.No) { Info($"[SKIP] Folder \'{name}\'"); return; }
+                        if (d == ReplaceDecision.Cancel) throw new OperationCanceledException();
+                    }
+                    Directory.CreateDirectory(dest);
+                    Info($"Copying folder → '{name}' → {GetPlatformCopyLabel(platform)}");
+                    await RoboCopyDir(source, dest, token);
+                    CopyCooldown(token);
+                    return;
+                }
+                else
+                {
+                    var dest = Path.Combine(destRoot, name);
+                    bool needsPrompt = Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any();
+                    if (needsPrompt)
+                    {
+                        var d = ConfirmReplaceCountdown(dest, OverwriteTimeout, $"{platform} folder '{name}'", folderPromptOnlyWhenNonEmpty: true, token: token);
+                        if (d == ReplaceDecision.No) { Info($"[SKIP] Folder '{name}'"); return; }
+                        if (d == ReplaceDecision.Cancel) throw new OperationCanceledException();
+                    }
+                    Directory.CreateDirectory(dest);
+                    Info($"Copying folder → '{Path.GetFileName(source.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))}' → {GetPlatformCopyLabel(platform)}");
+                    await RoboCopyDir(source, dest, token);
+                    CopyCooldown(token);
+                    return;
+                }
+            }
+
+            if (File.Exists(source))
+            {
+                var leaf = Path.GetFileName(source);
+                string target = platform switch
+                {
+                    Platform.Gamecube => Path.Combine(destRoot, leaf),
+                    Platform.Summercart64 => Path.Combine(destRoot, leaf),
+                    _ => Path.Combine(Path.Combine(destRoot, Path.GetFileNameWithoutExtension(source)), leaf),
+                };
+
+                var dec = ConfirmReplaceCountdown(target, OverwriteTimeout, $"{platform} file '{leaf}'", token: token);
+                if (dec == ReplaceDecision.No) { Info($"[SKIP] {leaf}"); return; }
+                if (dec == ReplaceDecision.Cancel) throw new OperationCanceledException();
+
+                Info($"Copying file → '{leaf}'→ {GetPlatformCopyLabel(platform)}");
+                var dstDir = Path.GetDirectoryName(target)!;
+                await RoboCopyFile(source, dstDir, token);
+                CopyCooldown(token);
+                return;
+            }
+
+            Info($"[SKIP] Not found: '{source}'");
+        }
+
+        // List combo helpers
+        void PopulateListCombo(ComboBox combo)
+        {
+            combo.Items.Clear();
+            try
+            {
+                Directory.CreateDirectory(GameListsDir);
+                var files = Directory.EnumerateFiles(GameListsDir, "*.txt", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileNameWithoutExtension).ToList();
+                foreach (var f in files) combo.Items.Add(new ComboItem(Path.GetFileNameWithoutExtension(f), f));
+                if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+            }
+            catch (IOException ex) { Warn("Could not read the GameLists folder: " + ex.Message); }
+            catch (UnauthorizedAccessException ex) { Warn("Could not read the GameLists folder: " + ex.Message); }
+        }
+        string? GetSelectedListPath(ComboBox combo) => combo.SelectedItem is ComboItem ci ? ci.FullPath : null;
+        sealed class ComboItem
+        {
+            public string Text { get; }
+            public string FullPath { get; }
+            public ComboItem(string text, string fullPath) { Text = text; FullPath = fullPath; }
+            public override string ToString() => Text;
+        }
+    }
+}

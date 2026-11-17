@@ -16,7 +16,6 @@
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <PublishTrimmed>false</PublishTrimmed>
-	<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 
     <!-- Enable R2R if you like faster startup at slight size cost -->
     <!--<PublishReadyToRun>true</PublishReadyToRun>-->
@@ -25,8 +24,30 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
+  <!-- Compression is only allowed for self-contained single-file builds
+       (otherwise: NETSDK1176 when publishing with self-contained false) -->
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- GD-ROM builder (Sappharad's DiscUtils fork, MIT) - same engine GDMENUCardManager uses for the menu image -->
+    <PackageReference Include="DiscUtilsGD" Version="2.1.1" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="Assets\SDBuilder_Icon.ico" />
     <None Include="app.manifest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Dreamcast menu templates: the app reads them from the "Tools" folder next to SD-Builder.exe
+         (the folder is named "tools" on disk; Windows paths are not case-sensitive).
+         Copied on build and publish, and kept out of the single-file .exe so they stay real files.
+         gdishrink.exe is not used by the app. -->
+    <None Include="tools\**\*" Exclude="tools\gdishrink.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

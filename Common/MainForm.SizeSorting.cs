@@ -15,35 +15,35 @@ namespace SDBuilderWin
             public SizeColumnComparer(int column, SortOrder order) { _column = column; _order = order; }
 
             public int Compare(object x, object y)
-        {
-            var a = x as ListViewItem;
-            var b = y as ListViewItem;
-            if (a == null || b == null) return 0;
-
-            string sa = _column < a.SubItems.Count ? a.SubItems[_column].Text : string.Empty;
-            string sb = _column < b.SubItems.Count ? b.SubItems[_column].Text : string.Empty;
-
-            // Always-top rule for blanks / "Installed" / dashes
-            bool aZero = IsZeroLike(sa);
-            bool bZero = IsZeroLike(sb);
-            if (aZero || bZero)
             {
-                if (aZero && !bZero) return -1; // A before B
-                if (!aZero && bZero) return 1;  // B before A
-                // both zero-like: stable secondary by item text (name)
-                return string.Compare(a.Text, b.Text, StringComparison.OrdinalIgnoreCase);
+                var a = x as ListViewItem;
+                var b = y as ListViewItem;
+                if (a == null || b == null) return 0;
+
+                string sa = _column < a.SubItems.Count ? a.SubItems[_column].Text : string.Empty;
+                string sb = _column < b.SubItems.Count ? b.SubItems[_column].Text : string.Empty;
+
+                // Always-top rule for blanks / "Installed" / dashes
+                bool aZero = IsZeroLike(sa);
+                bool bZero = IsZeroLike(sb);
+                if (aZero || bZero)
+                {
+                    if (aZero && !bZero) return -1; // A before B
+                    if (!aZero && bZero) return 1;  // B before A
+                                                    // both zero-like: stable secondary by item text (name)
+                    return string.Compare(a.Text, b.Text, StringComparison.OrdinalIgnoreCase);
+                }
+
+                // Numeric sort for real sizes
+                double da = ParseSizeToBytes(sa);
+                double db = ParseSizeToBytes(sb);
+
+                int result = (!double.IsNaN(da) && !double.IsNaN(db))
+                    ? da.CompareTo(db)
+                    : string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+
+                return _order == SortOrder.Descending ? -result : result;
             }
-
-            // Numeric sort for real sizes
-            double da = ParseSizeToBytes(sa);
-            double db = ParseSizeToBytes(sb);
-
-            int result = (!double.IsNaN(da) && !double.IsNaN(db))
-                ? da.CompareTo(db)
-                : string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
-
-            return _order == SortOrder.Descending ? -result : result;
-        }
         }
 
         private static double ParseSizeToBytes(string s)
@@ -75,7 +75,7 @@ namespace SDBuilderWin
             return double.NaN;
         }
 
-        
+
         private static bool IsZeroLike(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return true;
@@ -88,14 +88,14 @@ namespace SDBuilderWin
             return false;
         }
 
-        
+
         private static string StripSortGlyph(string s)
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
             return System.Text.RegularExpressions.Regex.Replace(s, @"\s*[▲▼]\s*$", "");
         }
 
-        
+
         private static void UpdateHeaderGlyph(ListView lv, int col, SortOrder order)
         {
             for (int i = 0; i < lv.Columns.Count; i++)
@@ -124,36 +124,36 @@ namespace SDBuilderWin
             try
             {
 
-            // Determine Size column: prefer header text "Size" (ignoring ▲/▼), else assume index 1
-            int sizeCol = -1;
-            for (int i = 0; i < lv.Columns.Count; i++)
-            {
-                var header = lv.Columns[i].Text;
-                var baseHeader = StripSortGlyph(header ?? string.Empty).Trim();
-                if (string.Equals(baseHeader, "Size", StringComparison.OrdinalIgnoreCase))
+                // Determine Size column: prefer header text "Size" (ignoring ▲/▼), else assume index 1
+                int sizeCol = -1;
+                for (int i = 0; i < lv.Columns.Count; i++)
                 {
-                    sizeCol = i;
-                    break;
+                    var header = lv.Columns[i].Text;
+                    var baseHeader = StripSortGlyph(header ?? string.Empty).Trim();
+                    if (string.Equals(baseHeader, "Size", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sizeCol = i;
+                        break;
+                    }
                 }
-            }
-            if (sizeCol == -1) sizeCol = (e.Column == 1 ? 1 : -1);
-            if (sizeCol == -1 || e.Column != sizeCol) return;
+                if (sizeCol == -1) sizeCol = (e.Column == 1 ? 1 : -1);
+                if (sizeCol == -1 || e.Column != sizeCol) return;
 
-            // Toggle per-ListView order
-            _sizeSortOrders.TryGetValue(lv, out var order);
-            order = (order == SortOrder.Ascending) ? SortOrder.Descending : SortOrder.Ascending;
-            _sizeSortOrders[lv] = order;
+                // Toggle per-ListView order
+                _sizeSortOrders.TryGetValue(lv, out var order);
+                order = (order == SortOrder.Ascending) ? SortOrder.Descending : SortOrder.Ascending;
+                _sizeSortOrders[lv] = order;
 
-            // Use custom comparer (disable built-in Sorting)
-            lv.Sorting = SortOrder.None;
-            lv.ShowGroups = false;
-            lv.ListViewItemSorter = new SizeColumnComparer(sizeCol, order);
-            lv.Sort();
+                // Use custom comparer (disable built-in Sorting)
+                lv.Sorting = SortOrder.None;
+                lv.ShowGroups = false;
+                lv.ListViewItemSorter = new SizeColumnComparer(sizeCol, order);
+                lv.Sort();
 
-            // Update header glyph (▲ ascending, ▼ descending)
-            UpdateHeaderGlyph(lv, sizeCol, order);
+                // Update header glyph (▲ ascending, ▼ descending)
+                UpdateHeaderGlyph(lv, sizeCol, order);
             }
             finally { lv.EndUpdate(); }
         }
-}
+    }
 }
