@@ -27,6 +27,14 @@ namespace SDBuilderWin
             };
         }
 
+        // The card index reads every \NN folder and the serial check reads IP.BIN from the source (often the NAS):
+        // both run on a background thread so the window keeps responding during a copy job.
+        static Task<DcCardIndex> ReadDcCardIndexAsync(string destRoot, CancellationToken token) =>
+            Task.Run(() => DcCardIndex.Read(destRoot), token);
+
+        Task<bool> IsDcGameAlreadyOnCardAsync(string source, DcCardIndex index, CancellationToken token) =>
+            Task.Run(() => IsDcGameAlreadyOnCard(source, index), token);
+
         /// <summary>True (and logs a [SKIP]) when the game in <paramref name="source"/> is already on the card.</summary>
         bool IsDcGameAlreadyOnCard(string source, DcCardIndex index)
         {

@@ -156,72 +156,27 @@ namespace SDBuilderWin
         }
 
 
-        void RefreshSarooList()
+        void RefreshSarooList() => _ = RefreshSarooListAsync();
+
+        /// <summary>Lists the folder on a background thread, fills the list, then works out the sizes (Common\MainForm.ListScan.cs).</summary>
+        async Task RefreshSarooListAsync()
         {
+            var ct = RestartScan(ref _srScanCts); // a newer refresh cancels this one
+            var patterns = BuildFilterPatterns(txtSarooFilter?.Text);
             try
             {
-                var srFilterText = (txtSarooFilter?.Text ?? "*").Trim();
-                var srPatterns = srFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                            .Select(s => s.Trim())
-                                            .ToArray();
-                if (srPatterns.Length == 0) srPatterns = new[] { "*" };
-                srPatterns = srPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
-                lvSrList.BeginUpdate();
-                _srBulkChange = true;
-                lvSrList.Items.Clear();
-                if (!Directory.Exists(_srFolder)) { SetSrStatus("Ready."); return; }
-
                 SetSrStatus("Scanning...");
-                if (lvSrList.Columns.Count < 2)
-                {
-                    lvSrList.Columns.Clear();
-                    lvSrList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvSrList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
-                }
-
-                if (rbSrFiles.Checked)
-                {
-                    foreach (var f in Directory.EnumerateFiles(_srFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(f);
-                        if (!MatchesAnyPattern(name, srPatterns) && !MatchesAnyPattern(f, srPatterns)) continue;
-                        var it = new ListViewItem(f);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _sarooChecked.Contains(f);
-                        it.Checked = _scChecked.Contains(f);
-                        it.Checked = _gcChecked.Contains(f);
-                        it.Checked = _srChecked.Contains(f);
-                        lvSrList.Items.Add(it);
-                    }
-                }
-                else
-                {
-                    foreach (var d in Directory.EnumerateDirectories(_srFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(d);
-                        if (!MatchesAnyPattern(name, srPatterns) && !MatchesAnyPattern(d, srPatterns)) continue;
-                        var it = new ListViewItem(d);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _scChecked.Contains(d);
-                        it.Checked = _gcChecked.Contains(d);
-                        it.Checked = _srChecked.Contains(d);
-                        lvSrList.Items.Add(it);
-                    }
-                }
+                var paths = await ListFolderAsync(_srFolder, rbSrFiles.Checked, patterns, ct);
+                if (ct.IsCancellationRequested) return;
+                FillScanList(lvSrList, paths ?? new List<string>(), _srChecked, XsStatusColWidth, b => _srBulkChange = b);
                 UpdateSrCounters();
-                _ = RecalcSrAsync();
+                if (paths == null) { SetSrStatus("Ready."); return; }
+
+                if (await ScanRowSizesAsync(lvSrList, ct, (it, size) => { ShowRowSize(it, size); if (it.Checked) UpdateSrCounters(); }))
+                    SetSrStatus($"Ready. {lvSrList.Items.Count} items.");
             }
-            catch (Exception ex)
-            {
-                Error("Saroo list error: " + ex.Message);
-            }
-            finally
-            {
-                _srBulkChange = false;
-                lvSrList.EndUpdate();
-            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Error("Saroo list error: " + ex.Message); }
         }
 
         void UpdateSrCounters()
@@ -240,60 +195,6 @@ namespace SDBuilderWin
                 lblSizeSR.Text = $"Size: {FormatSize(total)}";
             }
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-        }
-
-        async Task RecalcSrAsync()
-        {
-            try
-            {
-                _srScanCts?.Cancel();
-                _srScanCts = new CancellationTokenSource();
-                var ct = _srScanCts.Token;
-
-                await Task.Run(() =>
-                {
-                    foreach (ListViewItem it in lvSrList.Items)
-                    {
-                        if (ct.IsCancellationRequested) break;
-                        var path = it.Text;
-                        long size = 0;
-                        try
-                        {
-                            if (File.Exists(path))
-                            {
-                                size = new FileInfo(path).Length;
-                            }
-                            else if (Directory.Exists(path))
-                            {
-                                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                                {
-                                    if (ct.IsCancellationRequested) break;
-                                    try { size += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                                }
-                            }
-                            var sizeStr = FormatSize(size);
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add(sizeStr);
-                                else it.SubItems[1].Text = sizeStr;
-                                it.Tag = size;
-                                if (it.Checked) UpdateSrCounters();
-                            }));
-                        }
-                        catch
-                        {
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add("error");
-                                else it.SubItems[1].Text = "error";
-                            }));
-                        }
-                    }
-                }, ct);
-
-                BeginInvoke(new Action(() => SetSrStatus($"Ready. {lvSrList.Items.Count} items.")));
-            }
-            catch { /* cancelled */ }
         }
 
         // ===== Saroo Copy routine START =====

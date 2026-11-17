@@ -147,127 +147,27 @@ namespace SDBuilderWin
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
         }
 
-        void RefreshGamecubeList()
+        void RefreshGamecubeList() => _ = RefreshGamecubeListAsync();
+
+        /// <summary>Lists the folder on a background thread, fills the list, then works out the sizes (Common\MainForm.ListScan.cs).</summary>
+        async Task RefreshGamecubeListAsync()
         {
+            var ct = RestartScan(ref _gcScanCts); // a newer refresh cancels this one
+            var patterns = BuildFilterPatterns(txtGcFilter?.Text);
             try
             {
-                var gcFilterText = (txtGcFilter?.Text ?? "*").Trim();
-                var gcPatterns = gcFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                            .Select(s => s.Trim())
-                                            .ToArray();
-                if (gcPatterns.Length == 0) gcPatterns = new[] { "*" };
-                gcPatterns = gcPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
-                lvGcList.BeginUpdate();
-                _gcBulkChange = true;
-                lvGcList.Items.Clear();
-                if (!Directory.Exists(_gcFolder)) { SetGcStatus("Ready."); return; }
-
                 SetGcStatus("Scanning...");
-                // ensure columns
-                if (lvGcList.Columns.Count < 2)
-                {
-                    lvGcList.Columns.Clear();
-                    lvGcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvGcList.Columns.Add("Size", GcStatusColWidth, HorizontalAlignment.Left);
-                }
-
-                if (rbGcFiles.Checked)
-                {
-                    foreach (var f in Directory.EnumerateFiles(_gcFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(f);
-                        if (!MatchesAnyPattern(name, gcPatterns) && !MatchesAnyPattern(f, gcPatterns)) continue;
-                        var it = new ListViewItem(f);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _sarooChecked.Contains(f);
-                        it.Checked = _scChecked.Contains(f);
-                        it.Checked = _gcChecked.Contains(f);
-                        lvGcList.Items.Add(it);
-                    }
-                }
-                else
-                {
-                    foreach (var d in Directory.EnumerateDirectories(_gcFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(d);
-                        if (!MatchesAnyPattern(name, gcPatterns) && !MatchesAnyPattern(d, gcPatterns)) continue;
-                        var it = new ListViewItem(d);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _scChecked.Contains(d);
-                        it.Checked = _gcChecked.Contains(d);
-                        lvGcList.Items.Add(it);
-                    }
-                }
-
+                var paths = await ListFolderAsync(_gcFolder, rbGcFiles.Checked, patterns, ct);
+                if (ct.IsCancellationRequested) return;
+                FillScanList(lvGcList, paths ?? new List<string>(), _gcChecked, GcStatusColWidth, b => _gcBulkChange = b);
                 UpdateGcCounters();
-                _ = RecalcGcAsync();
-            }
-            catch (Exception ex)
-            {
-                Error("Error refreshing list: " + ex.Message);
-            }
-            finally
-            {
-                _gcBulkChange = false;
-                lvGcList.EndUpdate();
-            }
-        }
+                if (paths == null) { SetGcStatus("Ready."); return; }
 
-        async Task RecalcGcAsync()
-        {
-            try
-            {
-                _gcScanCts?.Cancel();
-                _gcScanCts = new CancellationTokenSource();
-                var ct = _gcScanCts.Token;
-
-                await Task.Run(() =>
-                {
-                    foreach (ListViewItem it in lvGcList.Items)
-                    {
-                        if (ct.IsCancellationRequested) break;
-                        var path = it.Text;
-                        long size = 0;
-                        try
-                        {
-                            if (File.Exists(path))
-                            {
-                                size = new FileInfo(path).Length;
-                            }
-                            else if (Directory.Exists(path))
-                            {
-                                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                                {
-                                    if (ct.IsCancellationRequested) break;
-                                    try { size += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                                }
-                            }
-                            var sizeStr = FormatSize(size);
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add(sizeStr);
-                                else it.SubItems[1].Text = sizeStr;
-                                it.Tag = size;
-                                if (it.Checked) UpdateGcCounters();
-                            }));
-                        }
-                        catch
-                        {
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add("error");
-                                else it.SubItems[1].Text = "error";
-                            }));
-                        }
-                    }
-                }, ct);
-
-                BeginInvoke(new Action(() => SetGcStatus($"Ready. {lvGcList.Items.Count} items.")));
+                if (await ScanRowSizesAsync(lvGcList, ct, (it, size) => { ShowRowSize(it, size); if (it.Checked) UpdateGcCounters(); }))
+                    SetGcStatus($"Ready. {lvGcList.Items.Count} items.");
             }
-            catch (OperationCanceledException) { /* ignore */ }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Error("Error refreshing list: " + ex.Message); }
         }
 
         // ===== GameCube Copy routine START =====

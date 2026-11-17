@@ -55,7 +55,8 @@ namespace SDBuilderWin
 
 
         // Async Listmaker size scans
-        CancellationTokenSource? _lmScanCts;
+        CancellationTokenSource? _lmScanCts;  // size scan
+        CancellationTokenSource? _lmListCts;  // building the list
 
         // Listmaker UI performance
         System.Windows.Forms.Timer? _lmDebounce;
@@ -225,8 +226,7 @@ namespace SDBuilderWin
                 _lmBulkChange = false;
 
                 SetLmStatus($"Loaded {added} new, skipped {dupes} duplicates from: {ofd.FileName}");
-                if (chkAutoValidate.Checked) ValidatePaths();
-                StartListmakerAutoScan();
+                StartListmakerAutoScan(reportValidation: chkAutoValidate.Checked);
             };
 
             btnValidateNow.Click += (_, __) => { ValidatePaths(); };
@@ -295,188 +295,85 @@ namespace SDBuilderWin
             lvList.Items.Add(it);
         }
 
-        async Task RecalcCountersAsync()
+        // (Un)checking a row only changes the totals: every row already gets its size from the list scan
+        // (RecalcListmakerAllAsync). Called by the _lmDebounce timer in MainForm.cs.
+        Task RecalcCountersAsync()
         {
-            // cancel any previous scan
-            _lmScanCts?.Cancel();
-            _lmScanCts = new CancellationTokenSource();
-            var token = _lmScanCts.Token;
-
-            // snapshot checked rows
-            var rows = lvList.Items.Cast<ListViewItem>().Where(it => it.Checked).ToList();
-
-            // prime: clear Tag and set status
-            foreach (var it in rows)
-            {
-                var pth = it.Text;
-                bool exists = File.Exists(pth) || Directory.Exists(pth);
-                it.Tag = null;
-                it.SubItems[1].Text = exists ? "scanning…" : "Missing";
-            }
-            SetCounters(rows.Count, 0);
-
-            // kick off per-item tasks (throttled)
-            var tasks = new List<Task>();
-            int parallel = Environment.ProcessorCount > 4 ? 4 : 2;
-            using (var sem = new System.Threading.SemaphoreSlim(parallel, parallel))
-            {
-                foreach (var it in rows)
-                {
-                    await sem.WaitAsync(token).ConfigureAwait(false);
-                    var itemRef = it;
-                    var task = Task.Run(() =>
-                    {
-                        try
-                        {
-                            token.ThrowIfCancellationRequested();
-                            var p = itemRef.Text;
-                            long sz = 0;
-                            if (File.Exists(p)) { sz = SafeFileLength(p); }
-                            else if (Directory.Exists(p)) { sz = SafeDirLength(p, token, recursive: chkRecursive.Checked); }
-                            // post result
-                            if (!IsDisposed && lvList.IsHandleCreated)
-                            {
-                                try
-                                {
-                                    lvList.BeginInvoke(new Action(() =>
-                                    {
-                                        if (itemRef.ListView == null) return;
-                                        itemRef.Tag = sz;
-                                        var existsNow = File.Exists(p) || Directory.Exists(p);
-                                        itemRef.SubItems[1].Text = existsNow ? FormatSize(sz) : "Missing";
-                                        UpdateLmTotalsFromItems();
-                                    }));
-                                }
-                                catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                            }
-                        }
-                        catch { /* ignore cancellations/errors per item */ }
-                        finally
-                        {
-                            sem.Release();
-                        }
-                    }, token);
-                    tasks.Add(task);
-                }
-                try { await Task.WhenAll(tasks); } catch { /* cancellation */ }
-            }
+            UpdateLmTotalsFromItems();
+            return Task.CompletedTask;
         }
 
-        private async Task RecalcListmakerAllAsync()
+        /// <summary>
+        /// Works out the size of every row on a background thread (a few rows at a time) and shows it on the
+        /// UI thread. With <paramref name="reportValidation"/> the status line ends with the OK / missing count.
+        /// </summary>
+        private async Task RecalcListmakerAllAsync(CancellationToken token, bool reportValidation)
         {
+            // UI thread: read the rows and the option once; the background part only gets plain values.
+            bool recursive = chkRecursive.Checked;
+            var rows = lvList.Items.Cast<ListViewItem>().Select(it => (Item: it, Path: it.Text)).ToList();
+            foreach (var (it, _) in rows)
+            {
+                it.Tag = null;
+                if (it.SubItems.Count > 1) it.SubItems[1].Text = "scanning…";
+            }
+            UpdateLmTotalsFromItems();
+
+            int missing = 0;
             try
             {
-                // we don't want to interfere with the user's checkmarks;
-                // just compute sizes/status for ALL rows currently listed.
-                var token = _lmScanCts?.Token ?? System.Threading.CancellationToken.None;
-                var rows = lvList.Items.Cast<ListViewItem>().ToList();
-
-                // prime
-                foreach (var it in rows)
+                var options = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount > 4 ? 4 : 2, CancellationToken = token };
+                await Task.Run(() => Parallel.ForEach(rows, options, row =>
                 {
-                    var pth = it.Text;
-                    bool exists = System.IO.File.Exists(pth) || System.IO.Directory.Exists(pth);
-                    it.Tag = null;
-                    it.SubItems[1].Text = exists ? "scanning…" : "Missing";
-                }
-
-                // throttle parallelism
-                var tasks = new List<Task>();
-                int parallel = Environment.ProcessorCount > 4 ? 4 : 2;
-                using (var sem = new System.Threading.SemaphoreSlim(parallel, parallel))
-                {
-                    foreach (var it in rows)
+                    long? size = null;
+                    try
                     {
-                        await sem.WaitAsync(token).ConfigureAwait(false);
-                        var itemRef = it;
-                        var task = Task.Run(() =>
-                        {
-                            try
-                            {
-                                var p = itemRef.Text;
-                                long sz = 0;
-                                if (System.IO.File.Exists(p)) sz = SafeFileLength(p);
-                                else if (System.IO.Directory.Exists(p)) sz = SafeDirLength(p, token, recursive: chkRecursive.Checked);
-
-                                if (!IsDisposed && lvList.IsHandleCreated)
-                                {
-                                    try
-                                    {
-                                        lvList.BeginInvoke(new Action(() =>
-                                        {
-                                            if (itemRef.ListView == null) return;
-                                            itemRef.Tag = sz;
-                                            var existsNow = System.IO.File.Exists(p) || System.IO.Directory.Exists(p);
-                                            itemRef.SubItems[1].Text = existsNow ? FormatSize(sz) : "Missing";
-                                            UpdateLmTotalsFromItems();
-                                        }));
-                                    }
-                                    catch { }
-                                }
-                            }
-                            catch { }
-                            finally
-                            {
-                                sem.Release();
-                            }
-                        }, token);
-                        tasks.Add(task);
+                        if (File.Exists(row.Path)) size = SafeFileLength(row.Path);
+                        else if (Directory.Exists(row.Path)) size = SafeDirLength(row.Path, token, recursive);
                     }
-                    try { await Task.WhenAll(tasks); } catch { }
-                }
-            }
-            catch { /* ignore */ }
+                    catch (OperationCanceledException) { return; }
+                    if (size == null) Interlocked.Increment(ref missing);
 
-            // Final sweep for any lingering 'scanning…' statuses
-            if (!IsDisposed && lvList.IsHandleCreated)
-            {
-                try
-                {
-                    lvList.BeginInvoke(new Action(() =>
+                    PostToUi(() =>
                     {
-                        foreach (ListViewItem it in lvList.Items)
-                        {
-                            if (it.SubItems.Count < 2) continue;
-                            if (it.SubItems[1].Text.Contains("scanning"))
-                            {
-                                var p = it.Text;
-                                long sz = 0;
-                                bool exists = System.IO.File.Exists(p) || System.IO.Directory.Exists(p);
-                                if (exists)
-                                {
-                                    if (System.IO.File.Exists(p)) sz = SafeFileLength(p);
-                                    else sz = SafeDirLength(p, System.Threading.CancellationToken.None, recursive: chkRecursive.Checked);
-                                    it.Tag = sz;
-                                    it.SubItems[1].Text = FormatSize(sz);
-                                }
-                                else
-                                {
-                                    it.SubItems[1].Text = "Missing";
-                                }
-                            }
-                        }
+                        if (token.IsCancellationRequested || row.Item.ListView != lvList) return;
+                        row.Item.Tag = size ?? 0;
+                        if (row.Item.SubItems.Count > 1) row.Item.SubItems[1].Text = size.HasValue ? FormatSize(size.Value) : "Missing";
                         UpdateLmTotalsFromItems();
-                    }));
-                }
-                catch { }
+                    });
+                }), token);
             }
+            catch (OperationCanceledException) { return; } // a newer scan took over
+            if (token.IsCancellationRequested) return;
 
-            try { BeginInvoke(new Action(() => SetLmStatus("Ready."))); } catch { }
+            if (reportValidation) SetLmStatus($"Validated: {rows.Count - missing} OK, {missing} missing.");
+            else SetLmStatus(missing == 0 ? "Ready." : $"Ready. {missing} missing.");
         }
 
 
-        void ValidatePaths()
+        void ValidatePaths() => _ = ValidatePathsAsync();
+
+        /// <summary>Marks every row OK / Missing; the existence checks run on a background thread.</summary>
+        async Task ValidatePathsAsync()
         {
+            var rows = lvList.Items.Cast<ListViewItem>().Select(it => (Item: it, Path: it.Text)).ToList();
+            SetLmStatus("Validating...");
+            bool[] exists;
+            try { exists = await Task.Run(() => rows.Select(r => File.Exists(r.Path) || Directory.Exists(r.Path)).ToArray()); }
+            catch (Exception ex) { Error("Validate failed: " + ex.Message); return; }
+
             int ok = 0, missing = 0;
             lvList.BeginUpdate();
-            foreach (ListViewItem it in lvList.Items)
+            try
             {
-                var p = it.Text;
-                bool exists = File.Exists(p) || Directory.Exists(p);
-                it.SubItems[1].Text = exists ? "OK" : "Missing";
-                if (exists) ok++; else missing++;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (exists[i]) ok++; else missing++;
+                    var it = rows[i].Item;
+                    if (it.ListView == lvList && it.SubItems.Count > 1) it.SubItems[1].Text = exists[i] ? "OK" : "Missing";
+                }
             }
-            lvList.EndUpdate();
+            finally { lvList.EndUpdate(); }
             _lmBulkChange = false;
             SetLmStatus($"Validated: {ok} OK, {missing} missing.");
         }
@@ -540,8 +437,7 @@ namespace SDBuilderWin
             _lmBulkChange = false;
 
             SetLmStatus($"Loaded {added} new, skipped {dupes} duplicates from: {path}");
-            if (chkAutoValidate.Checked) ValidatePaths();
-            StartListmakerAutoScan();
+            StartListmakerAutoScan(reportValidation: chkAutoValidate.Checked);
         }
         void WireListContextMenu()
         {
@@ -580,127 +476,99 @@ namespace SDBuilderWin
         }
 
 
-        void RefreshListmakerList()
+        void RefreshListmakerList() => _ = RefreshListmakerListAsync();
+
+        /// <summary>
+        /// Folder entries (plus the rows loaded from .txt files), filtered. The folder is read on a background
+        /// thread; a newer refresh cancels this one.
+        /// </summary>
+        async Task RefreshListmakerListAsync()
         {
+            var ct = RestartScan(ref _lmListCts);
+            // UI thread: read the options once.
+            var folder = _lmFolder;
+            bool mixed = rbMixed.Checked, files = rbFiles.Checked, recursive = chkRecursive.Checked;
+            var filter = (txtFilter.Text ?? string.Empty).Trim();
+            var txtItems = _lmTxtItems.ToList();
+            if (!string.IsNullOrWhiteSpace(folder)) SetLmStatus("Loading...");
+
+            List<string> final;
+            try
+            {
+                final = await Task.Run(() => BuildListmakerItems(folder, mixed, files, recursive, filter, txtItems, ct), ct);
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { Error("Game list: could not read folder: " + ex.Message); SetLmStatus("Could not read folder."); return; }
+            if (ct.IsCancellationRequested) return;
+
             lvList.BeginUpdate();
-            _lmBulkChange = true;
+            _lmBulkChange = true; // AddRowLM restores the check marks from _lmChecked
             try
             {
                 lvList.Items.Clear();
-
-                var filter = (txtFilter.Text ?? "*").Trim();
-                var patterns = filter.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                     .Select(s => s.Trim())
-                                     .ToArray();
-                if (patterns.Length == 0) patterns = new[] { rbFiles.Checked ? "*.*" : "*" };
-
-                var opt = chkRecursive.Checked ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-                // Gather folder items if a valid folder is selected; otherwise leave empty
-                IEnumerable<string> folderItems = Enumerable.Empty<string>();
-                bool hasFolder = !string.IsNullOrWhiteSpace(_lmFolder) && Directory.Exists(_lmFolder);
-                if (hasFolder)
-                {
-
-                    if (rbMixed.Checked)
-                    {
-                        // Mixed: top-level files + folders only
-                        var root = _lmFolder;
-                        IEnumerable<string> files = Enumerable.Empty<string>();
-                        IEnumerable<string> dirs = Enumerable.Empty<string>();
-                        try { files = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly); } catch { }
-                        try { dirs = Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly); } catch { }
-                        folderItems = files.Concat(dirs);
-                    }
-                    else if (rbFiles.Checked)
-                    {
-                        folderItems = Directory.EnumerateFiles(_lmFolder, "*", opt);
-                    }
-                    else
-                    {
-                        folderItems = Directory.EnumerateDirectories(_lmFolder, "*", opt);
-                    }
-
-                }
-                else
-                {
-                    SetLmStatus("No folder selected.");
-                }
-
-                // Combine persisted .txt items with current folder items with current folder items
-                var combined = new HashSet<string>(folderItems, StringComparer.OrdinalIgnoreCase);
-                foreach (var p in _lmTxtItems) combined.Add(p);
-
-                // Apply filter to combined set (case-insensitive, matches filename OR full path)
-                IEnumerable<string> final = combined;
-                var f = (txtFilter.Text ?? string.Empty).Trim();
-                if (!string.IsNullOrEmpty(f) && f != "*" && f != "*.*")
-                {
-                    bool hasWild = f.IndexOfAny(new[] { '*', '?' }) >= 0;
-                    if (hasWild)
-                    {
-                        string pattern = "^" + Regex.Escape(f).Replace("\\\\*", ".*").Replace("\\\\?", ".") + "$";
-                        var rx = new Regex(pattern, RegexOptions.IgnoreCase);
-                        final = final.Where(p => rx.IsMatch(p) || rx.IsMatch(Path.GetFileName(p)));
-                    }
-                    else
-                    {
-                        final = final.Where(p => p.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0
-                                              || Path.GetFileName(p).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0);
-                    }
-                }
-
-                // Populate list
-                foreach (var path in final)
-                    AddRowLM(path);
-
-                // Restore checked state
-                try
-                {
-                    _lmBulkChange = true;
-                    foreach (ListViewItem it in lvList.Items)
-                    {
-                        var p = it.Text;
-                        it.Checked = !string.IsNullOrWhiteSpace(p) && _lmChecked.Contains(p);
-                    }
-                }
-                finally { _lmBulkChange = false; }
-
-                SetLmStatus($"Showing {final.Count()} items");
-
-                StartListmakerAutoScan();
+                foreach (var path in final) AddRowLM(path);
             }
             finally
             {
-                lvList.EndUpdate();
                 _lmBulkChange = false;
+                lvList.EndUpdate();
             }
 
+            SetLmStatus($"Showing {final.Count} items");
             StartListmakerAutoScan();
         }
 
-        private void StartListmakerAutoScan()
+        /// <summary>Background thread: the rows for the list (no UI access).</summary>
+        static List<string> BuildListmakerItems(string folder, bool mixed, bool files, bool recursive, string filter,
+                                                List<string> txtItems, CancellationToken ct)
+        {
+            var combined = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+            {
+                var opt = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                IEnumerable<string> folderItems;
+                if (mixed)
+                {
+                    // Mixed: top-level files + folders only
+                    var found = new List<string>();
+                    try { found.AddRange(Directory.EnumerateFiles(folder, "*", SearchOption.TopDirectoryOnly)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    try { found.AddRange(Directory.EnumerateDirectories(folder, "*", SearchOption.TopDirectoryOnly)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    folderItems = found;
+                }
+                else if (files) folderItems = Directory.EnumerateFiles(folder, "*", opt);
+                else folderItems = Directory.EnumerateDirectories(folder, "*", opt);
+
+                foreach (var p in folderItems)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    combined.Add(p);
+                }
+            }
+            foreach (var p in txtItems) combined.Add(p); // rows loaded from .txt files stay in the list
+
+            // Filter (case-insensitive) on the file name OR the full path: wildcards, or else "contains".
+            IEnumerable<string> final = combined;
+            if (!string.IsNullOrEmpty(filter) && filter != "*" && filter != "*.*")
+            {
+                if (filter.IndexOfAny(new[] { '*', '?' }) >= 0)
+                {
+                    var rx = new Regex("^" + Regex.Escape(filter).Replace(@"\*", ".*").Replace(@"\?", ".") + "$", RegexOptions.IgnoreCase);
+                    final = final.Where(p => rx.IsMatch(p) || rx.IsMatch(Path.GetFileName(p)));
+                }
+                else
+                {
+                    final = final.Where(p => p.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0
+                                          || Path.GetFileName(p).IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
+                }
+            }
+            return final.ToList();
+        }
+
+        private void StartListmakerAutoScan(bool reportValidation = false)
         {
             SetLmStatus("Scanning...");
-
-            try
-            {
-                _lmScanCts?.Cancel();
-                _lmScanCts?.Dispose();
-            }
-            catch { }
-
-            _lmScanCts = new System.Threading.CancellationTokenSource();
-
-            _ = System.Threading.Tasks.Task.Run(async () =>
-            {
-                try
-                {
-                    await RecalcListmakerAllAsync().ConfigureAwait(false);
-                }
-                catch (System.OperationCanceledException) { }
-                catch { }
-            });
+            var token = RestartScan(ref _lmScanCts); // cancels the previous size scan
+            _ = RecalcListmakerAllAsync(token, reportValidation);
         }
     }
 }

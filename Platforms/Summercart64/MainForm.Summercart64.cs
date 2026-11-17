@@ -27,6 +27,7 @@ namespace SDBuilderWin
         bool _scBulkChange = false;
         HashSet<string> _scChecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         System.Windows.Forms.Timer? _scFilterDebounce;
+        CancellationTokenSource? _scScanCts;
         // Repo moved to n64brew and the "rolling_release" tag is gone; "latest" always points at the newest stable release.
         const string SC64_Url = "https://github.com/n64brew/N64FlashcartMenu/releases/latest/download/sc64menu.n64";
         const string SC64_64DD_Url = "https://64dd.org/download/sc64_64ddipl.zip";
@@ -43,116 +44,33 @@ namespace SDBuilderWin
         void WireSummercartListmaker()
         {
             // Mirrors Xstation: rebuild list for current folder + mode
-            void RefreshScList()
+            void RefreshScList() => _ = RefreshScListAsync();
+
+            // Lists the folder on a background thread, fills the list, then works out the sizes (Common\MainForm.ListScan.cs).
+            async Task RefreshScListAsync()
             {
+                var ct = RestartScan(ref _scScanCts); // a newer refresh cancels this one
+                var patterns = BuildFilterPatterns(txtScFilter?.Text);
                 try
                 {
-                    var scFilterText = (txtScFilter?.Text ?? "*").Trim();
-                    var scPatterns = scFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                                 .Select(s => s.Trim())
-                                                 .ToArray();
-                    if (scPatterns.Length == 0) scPatterns = new[] { "*" };
-                    scPatterns = scPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
-
-                    lvScList.BeginUpdate();
-                    _scBulkChange = true;
-                    lvScList.Items.Clear();
-                    if (string.IsNullOrWhiteSpace(_scFolder) || !Directory.Exists(_scFolder))
-                    {
-                        SetScStatus("Ready.");
-                        return;
-                    }
-
                     SetScStatus("Scanning...");
+                    var paths = await ListFolderAsync(_scFolder, rbScFiles.Checked, patterns, ct);
+                    if (ct.IsCancellationRequested) return;
+                    FillScanList(lvScList, paths ?? new List<string>(), _scChecked, 160, b => _scBulkChange = b);
+                    UpdateScCounters();
+                    if (paths == null) { SetScStatus("Ready."); return; }
                     AutoSizeSc();
 
-                    // Ensure 2 columns exist (Path + Status)
-                    if (lvScList.Columns.Count < 2)
-                    {
-                        lvScList.Columns.Clear();
-                        lvScList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                        lvScList.Columns.Add("Size", 160, HorizontalAlignment.Left);
-                    }
-
-                    if (rbScFiles.Checked)
-                    {
-                        foreach (var f in Directory.EnumerateFiles(_scFolder, "*", SearchOption.TopDirectoryOnly))
+                    if (await ScanRowSizesAsync(lvScList, ct, (it, size) =>
                         {
-                            var name = System.IO.Path.GetFileName(f);
-                            if (!MatchesAnyPattern(name, scPatterns) && !MatchesAnyPattern(f, scPatterns)) continue;
-                            var it = new ListViewItem(f);
-                            it.SubItems.Add("scanning...");
-                            it.Tag = (long?)null;
-                            it.Checked = _scChecked.Contains(f);
-                            lvScList.Items.Add(it);
-                        }
-                    }
-                    else
-                    {
-                        foreach (var d in Directory.EnumerateDirectories(_scFolder, "*", SearchOption.TopDirectoryOnly))
-                        {
-                            var name = System.IO.Path.GetFileName(d);
-                            if (!MatchesAnyPattern(name, scPatterns) && !MatchesAnyPattern(d, scPatterns)) continue;
-                            var it = new ListViewItem(d);
-                            it.SubItems.Add("scanning...");
-                            it.Tag = (long?)null;
-                            it.Checked = _scChecked.Contains(d);
-                            lvScList.Items.Add(it);
-                        }
-                    }
-
-                    // Background size pass (same pattern as other tabs)
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            foreach (ListViewItem it in lvScList.Items)
-                            {
-                                var p = it.Text;
-                                long sz = 0;
-                                try
-                                {
-                                    if (File.Exists(p))
-                                    {
-                                        sz = new FileInfo(p).Length;
-                                    }
-                                    else if (Directory.Exists(p))
-                                    {
-                                        foreach (var f in Directory.EnumerateFiles(p, "*", SearchOption.AllDirectories))
-                                        {
-                                            try { sz += new FileInfo(f).Length; } catch { }
-                                        }
-                                    }
-                                }
-                                catch { }
-
-                                try
-                                {
-                                    BeginInvoke(new Action(() =>
-                                    {
-                                        it.Tag = sz;
-                                        it.SubItems[1].Text = (File.Exists(p) || Directory.Exists(p)) ? FormatSize(sz) : "Missing";
-                                        if (it.Checked) UpdateScCounters();
-                                    }));
-                                }
-                                catch { }
-                            }
-
-                            BeginInvoke(new Action(() => SetScStatus($"Ready. {lvScList.Items.Count} items.")));
-                        }
-                        catch { }
-                    });
+                            it.Tag = size ?? 0;
+                            it.SubItems[1].Text = size.HasValue ? FormatSize(size.Value) : "Missing";
+                            if (it.Checked) UpdateScCounters();
+                        }))
+                        SetScStatus($"Ready. {lvScList.Items.Count} items.");
                 }
-                catch (Exception ex)
-                {
-                    Error("Summercart64 list error: " + ex.Message);
-                }
-                finally
-                {
-                    _scBulkChange = false;
-                    lvScList.EndUpdate();
-                    UpdateScCounters();
-                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { Error("Summercart64 list error: " + ex.Message); }
             }
 
             // columns

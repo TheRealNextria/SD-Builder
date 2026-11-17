@@ -168,226 +168,122 @@ namespace SDBuilderWin
         }
 
 
-        async Task RecalcDcAsync()
+        void RefreshDreamcastList() => _ = RefreshDreamcastListAsync();
+
+        /// <summary>Lists the folder on a background thread, fills the list, then marks installed games and sizes.</summary>
+        async Task RefreshDreamcastListAsync()
         {
+            var ct = RestartScan(ref _dcScanCts); // a newer refresh cancels this one
+            var patterns = BuildFilterPatterns(txtDcFilter?.Text);
             try
             {
-                _dcScanCts?.Cancel();
-                _dcScanCts = new CancellationTokenSource();
+                SetDcStatus("Scanning...");
+                var paths = await ListFolderAsync(_dcFolder, rbDcFiles.Checked, patterns, ct);
+                if (ct.IsCancellationRequested) return;
+                FillScanList(lvDcList, paths ?? new List<string>(), _dcChecked, XsStatusColWidth, b => _dcBulkChange = b);
+                UpdateDcCounters();
+                if (paths == null) { SetDcStatus("Ready."); return; }
 
-                // Build index of installed Dreamcast serials on the selected drive (if any)
-                var dcDrive = CurrentDriveLetter();
-
-                // Cache to derive serials for non-.gdi files by inspecting sibling .gdi in the same folder
-                var dcDirSerialCache = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(System.StringComparer.OrdinalIgnoreCase);
-
-                var dcExistingSerials = (dcDrive != null)
-                    ? IndexDcSerials($@"{dcDrive}:")
-                    : new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
-
-                var dcExistingSerialDiscs = (dcDrive != null)
-                    ? IndexDcSerialDiscs($@"{dcDrive}:")
-                    : new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(System.StringComparer.OrdinalIgnoreCase);
-
-
-
-
-                var ct = _dcScanCts.Token;
-
-                await Task.Run(() =>
-                {
-                    foreach (ListViewItem it in lvDcList.Items)
-                    {
-                        if (ct.IsCancellationRequested) break;
-                        var path = it.Text;
-
-
-                        bool isInstalled = false;
-                        try
-                        {
-                            // 1) Try direct serial extraction from this path (works well for .gdi)
-                            if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
-                            {
-                                if (dcExistingSerialDiscs.TryGetValue(srcSerial, out var discsSet))
-                                {
-                                    if (TryGuessDiscKey(it.Text, path, out var dk))
-                                    {
-                                        isInstalled = discsSet.Contains(dk) || System.Linq.Enumerable.Any(discsSet, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase));
-                                    }
-                                    else
-                                    {
-                                        // If we cannot determine disc number, assume NOT installed unless it's clearly single-disc only.
-                                        isInstalled = discsSet.Contains("1/1");
-                                    }
-                                }
-                                else
-                                {
-                                    isInstalled = false;
-                                }
-                            }
-                            else
-                            {
-                                // 2) Fallback: look for a sibling .gdi in the same folder and use that serial
-                                var dir = Path.GetDirectoryName(path) ?? string.Empty;
-                                if (!string.IsNullOrEmpty(dir))
-                                {
-                                    if (!dcDirSerialCache.TryGetValue(dir, out var dirSerial) || string.IsNullOrWhiteSpace(dirSerial))
-                                    {
-                                        try
-                                        {
-                                            var gdi = System.Linq.Enumerable.FirstOrDefault(Directory.EnumerateFiles(dir, "*.gdi"));
-                                            if (!string.IsNullOrEmpty(gdi) && TryExtractDcSerialFromSource(gdi, out var gdiSerial) && !string.IsNullOrWhiteSpace(gdiSerial))
-                                            {
-                                                dirSerial = gdiSerial;
-                                            }
-                                            dcDirSerialCache[dir] = dirSerial;
-                                        }
-                                        catch
-                                        {
-                                            // ignore directory access errors
-                                        }
-                                    }
-                                    if (!string.IsNullOrWhiteSpace(dirSerial))
-                                    {
-                                        // Disc-aware check
-                                        if (dcExistingSerialDiscs.TryGetValue(dirSerial, out var discsSet))
-                                        {
-                                            if (TryGuessDiscKey(it.Text, path, out var dk))
-                                            {
-                                                isInstalled = discsSet.Contains(dk) || System.Linq.Enumerable.Any(discsSet, v => v.StartsWith(dk.Split('/')[0] + "/", System.StringComparison.OrdinalIgnoreCase));
-                                            }
-                                            else
-                                            {
-                                                // If we cannot determine disc number, assume NOT installed unless it's clearly single-disc only.
-                                                isInstalled = discsSet.Contains("1/1");
-                                            }
-                                        }
-                                        else
-                                        {
-                                            isInstalled = false;
-                                        }
-
-                                    }
-                                }
-                            }
-                        }
-                        catch { /* ignore */ }
-
-
-                        long size = 0;
-                        try
-                        {
-                            if (File.Exists(path))
-                            {
-                                size = new FileInfo(path).Length;
-                            }
-                            else if (Directory.Exists(path))
-                            {
-                                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                                {
-                                    if (ct.IsCancellationRequested) break;
-                                    try { size += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                                }
-                            }
-                            var sizeStr = FormatSize(size);
-
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (isInstalled)
-                                {
-                                    if (it.SubItems.Count < 2) it.SubItems.Add("Installed");
-                                    else it.SubItems[1].Text = "Installed";
-                                    try
-                                    {
-                                        it.ForeColor = SystemColors.GrayText;
-                                        it.Font = new Font(it.Font, FontStyle.Italic);
-                                    }
-                                    catch { /* ignore styling issues */ }
-                                    it.Tag = new DcMeta { Installed = true, Size = size }; it.Checked = false;
-                                    _dcChecked.Remove(it.Text);
-                                }
-                                else
-                                {
-                                    if (it.SubItems.Count < 2) it.SubItems.Add(sizeStr);
-                                    else it.SubItems[1].Text = sizeStr;
-                                    it.Tag = new DcMeta { Installed = false, Size = size };
-                                    if (it.Checked) UpdateDcCounters();
-                                }
-                            }));
-
-                        }
-                        catch
-                        {
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add("error");
-                                else it.SubItems[1].Text = "error";
-                            }));
-                        }
-                    }
-                }, ct);
-
-                BeginInvoke(new Action(() => SetDcStatus($"Ready. {lvDcList.Items.Count} items.")));
+                if (await RecalcDcAsync(ct)) SetDcStatus($"Ready. {lvDcList.Items.Count} items.");
             }
-            catch { /* cancelled */ }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Error("Dreamcast list error: " + ex.Message); }
         }
 
-        void RefreshDreamcastList()
+        /// <summary>
+        /// For every row, on a background thread: is the game already on the selected card (serial + disc),
+        /// and how big is it. Installed rows are greyed out and unchecked. False when cancelled.
+        /// </summary>
+        async Task<bool> RecalcDcAsync(CancellationToken ct)
+        {
+            var dcDrive = CurrentDriveLetter(); // UI state: read it here, not on the background thread
+            var rows = lvDcList.Items.Cast<ListViewItem>().Select(it => (Item: it, Path: it.Text)).ToList();
+            try
+            {
+                await Task.Run(() =>
+                {
+                    // Reading the serials of all games on the card is many small files: keep it off the UI thread too.
+                    var cardDiscs = dcDrive != null
+                        ? IndexDcSerialDiscs($@"{dcDrive}:\")
+                        : new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+                    var dirSerialCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var (item, path) in rows)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        bool installed = cardDiscs.Count > 0 && IsDcSourceInstalled(path, cardDiscs, dirSerialCache);
+                        var size = PathSize(path, ct);
+                        PostToUi(() => { if (!ct.IsCancellationRequested && item.ListView == lvDcList) ShowDcRow(item, installed, size); });
+                    }
+                }, ct);
+            }
+            catch (OperationCanceledException) { return false; }
+            return !ct.IsCancellationRequested;
+        }
+
+        /// <summary>
+        /// True when the game at <paramref name="path"/> is on the card. The serial comes from the image itself,
+        /// or else from a .gdi in the same folder (cached per folder). Runs on a background thread.
+        /// </summary>
+        static bool IsDcSourceInstalled(string path, Dictionary<string, HashSet<string>> cardDiscs, Dictionary<string, string?> dirSerialCache)
         {
             try
             {
-                var dcFilterText = (txtDcFilter?.Text ?? "*").Trim();
-                var dcPatterns = dcFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                             .Select(s => s.Trim())
-                                             .ToArray();
-                if (dcPatterns.Length == 0) dcPatterns = new[] { "*" };
-                dcPatterns = dcPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
-                lvDcList.BeginUpdate();
-                lvDcList.Items.Clear();
-                if (!Directory.Exists(_dcFolder)) { SetDcStatus("Ready."); lvDcList.EndUpdate(); return; }
-
-                SetDcStatus("Scanning...");
-                if (lvDcList.Columns.Count < 2)
+                string? serial = null;
+                if (TryExtractDcSerialFromSource(path, out var srcSerial) && !string.IsNullOrWhiteSpace(srcSerial))
                 {
-                    lvDcList.Columns.Clear();
-                    lvDcList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvDcList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
-                }
-
-                if (rbDcFiles.Checked)
-                {
-                    foreach (var f in Directory.EnumerateFiles(_dcFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(f);
-                        if (!MatchesAnyPattern(name, dcPatterns) && !MatchesAnyPattern(f, dcPatterns)) continue;
-                        var it = new ListViewItem(f);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _dcChecked.Contains(f);
-                        lvDcList.Items.Add(it);
-                    }
+                    serial = srcSerial;
                 }
                 else
                 {
-                    foreach (var d in Directory.EnumerateDirectories(_dcFolder, "*", SearchOption.TopDirectoryOnly))
+                    var dir = Path.GetDirectoryName(path) ?? string.Empty;
+                    if (dir.Length > 0)
                     {
-                        var name = System.IO.Path.GetFileName(d);
-                        if (!MatchesAnyPattern(name, dcPatterns) && !MatchesAnyPattern(d, dcPatterns)) continue;
-                        var it = new ListViewItem(d);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _dcChecked.Contains(d);
-                        lvDcList.Items.Add(it);
+                        if (!dirSerialCache.TryGetValue(dir, out serial))
+                        {
+                            var gdi = Directory.EnumerateFiles(dir, "*.gdi").FirstOrDefault();
+                            if (!string.IsNullOrEmpty(gdi) && TryExtractDcSerialFromSource(gdi, out var gdiSerial) && !string.IsNullOrWhiteSpace(gdiSerial))
+                                serial = gdiSerial;
+                            dirSerialCache[dir] = serial;
+                        }
                     }
                 }
-                UpdateDcCounters();
-                _ = RecalcDcAsync();
+                if (string.IsNullOrWhiteSpace(serial) || !cardDiscs.TryGetValue(serial, out var discs)) return false;
+
+                // Disc-aware: disc 2 of a game is not "installed" because disc 1 is on the card.
+                if (TryGuessDiscKey(path, path, out var dk))
+                    return discs.Contains(dk) || discs.Any(v => v.StartsWith(dk.Split('/')[0] + "/", StringComparison.OrdinalIgnoreCase));
+                // Disc number unknown: only count it as installed for a single-disc game.
+                return discs.Contains("1/1");
             }
-            catch (Exception ex)
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+        }
+
+        /// <summary>UI thread: show the result of RecalcDcAsync for one row.</summary>
+        void ShowDcRow(ListViewItem it, bool installed, long? size)
+        {
+            if (it.SubItems.Count < 2) it.SubItems.Add("");
+            if (installed)
             {
-                Error("Dreamcast list error: " + ex.Message);
+                it.SubItems[1].Text = "Installed";
+                it.ForeColor = SystemColors.GrayText;
+                it.Font = new Font(it.Font, FontStyle.Italic);
+                it.Tag = new DcMeta { Installed = true, Size = size ?? 0 };
+                if (it.Checked)
+                {
+                    _dcBulkChange = true; // programmatic uncheck: skip the ItemCheck guard and the ItemChecked handler
+                    try { it.Checked = false; } finally { _dcBulkChange = false; }
+                }
+                _dcChecked.Remove(it.Text);
+                UpdateDcCounters();
             }
-            finally { try { lvDcList.EndUpdate(); } catch { } }
+            else
+            {
+                it.SubItems[1].Text = size.HasValue ? FormatSize(size.Value) : "error";
+                it.Tag = new DcMeta { Installed = false, Size = size ?? 0 };
+                if (it.Checked) UpdateDcCounters();
+            }
         }
 
 
@@ -454,11 +350,11 @@ namespace SDBuilderWin
 
             if (!await ConfirmFreeSpaceAsync(destDrive, sources, token)) return;
 
-            var dcIndex = DcCardIndex.Read(destRoot);
+            var dcIndex = await ReadDcCardIndexAsync(destRoot, token);
             foreach (var path in sources)
             {
                 token.ThrowIfCancellationRequested();
-                if (IsDcGameAlreadyOnCard(path, dcIndex)) continue;
+                if (await IsDcGameAlreadyOnCardAsync(path, dcIndex, token)) continue;
                 await CopyDreamcastGameAsync(path, destRoot, token);
             }
 

@@ -474,9 +474,11 @@ namespace SDBuilderWin
                             stack.Push(d);
                         }
                     }
+                    catch (OperationCanceledException) { throw; }
                     catch { /* skip inaccessible subpaths */ }
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
             return total;
         }

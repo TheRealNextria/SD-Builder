@@ -116,7 +116,7 @@ namespace SDBuilderWin
             Info($"Destination path: {destRoot}");
 
 
-            var dcIndex = platform == Platform.Dreamcast ? DcCardIndex.Read(destRoot) : null;
+            var dcIndex = platform == Platform.Dreamcast ? await ReadDcCardIndexAsync(destRoot, token) : null;
             if (!await ConfirmFreeSpaceAsync(destDrive, ReadListEntries(listPath), token)) return;
 
             foreach (var raw in File.ReadAllLines(listPath))
@@ -131,7 +131,7 @@ namespace SDBuilderWin
                 if (!File.Exists(line) && !Directory.Exists(line)) { Info($"[SKIP] Not found: \"{line}\""); continue; }
 
                 // Dreamcast: skip games whose serial/disc is already on the card
-                if (dcIndex != null && IsDcGameAlreadyOnCard(line, dcIndex)) continue;
+                if (dcIndex != null && await IsDcGameAlreadyOnCardAsync(line, dcIndex, token)) continue;
                 if (token.IsCancellationRequested) return;
                 await CopyEntry(line, platform, destRoot, token);
             }

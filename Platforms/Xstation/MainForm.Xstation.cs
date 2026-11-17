@@ -123,70 +123,27 @@ namespace SDBuilderWin
 
         }
 
-        void RefreshXstationList()
+        void RefreshXstationList() => _ = RefreshXstationListAsync();
+
+        /// <summary>Lists the folder on a background thread, fills the list, then works out the sizes (Common\MainForm.ListScan.cs).</summary>
+        async Task RefreshXstationListAsync()
         {
+            var ct = RestartScan(ref _xsScanCts); // a newer refresh cancels this one
+            var patterns = BuildFilterPatterns(txtXsFilter?.Text);
             try
             {
-                var xsFilterText = (txtXsFilter?.Text ?? "*").Trim();
-                var xsPatterns = xsFilterText.Split(new[] { ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
-                                             .Select(s => s.Trim())
-                                             .ToArray();
-                if (xsPatterns.Length == 0) xsPatterns = new[] { "*" };
-                xsPatterns = xsPatterns.Select(p => (p.Contains('*') || p.Contains('?')) ? p : ($"*{p}*")).ToArray();
-                lvXsList.BeginUpdate();
-                lvXsList.Items.Clear();
-                if (!Directory.Exists(_xsFolder)) { SetXsStatus("Ready."); return; }
-
                 SetXsStatus("Scanning...");
-                // ensure columns
-                if (lvXsList.Columns.Count < 2)
-                {
-                    lvXsList.Columns.Clear();
-                    lvXsList.Columns.Add("Path", -2, HorizontalAlignment.Left);
-                    lvXsList.Columns.Add("Size", XsStatusColWidth, HorizontalAlignment.Left);
-                }
-
-                if (rbXsFiles.Checked)
-                {
-                    foreach (var f in Directory.EnumerateFiles(_xsFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(f);
-                        if (!MatchesAnyPattern(name, xsPatterns) && !MatchesAnyPattern(f, xsPatterns)) continue;
-                        var it = new ListViewItem(f);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _sarooChecked.Contains(f);
-                        it.Checked = _scChecked.Contains(f);
-                        it.Checked = _gcChecked.Contains(f);
-                        it.Checked = _srChecked.Contains(f);
-                        it.Checked = _xsChecked.Contains(f);
-                        lvXsList.Items.Add(it);
-                    }
-                }
-                else
-                {
-                    foreach (var d in Directory.EnumerateDirectories(_xsFolder, "*", SearchOption.TopDirectoryOnly))
-                    {
-                        var name = System.IO.Path.GetFileName(d);
-                        if (!MatchesAnyPattern(name, xsPatterns) && !MatchesAnyPattern(d, xsPatterns)) continue;
-                        var it = new ListViewItem(d);
-                        it.SubItems.Add("scanning...");
-                        it.Tag = (long?)null;
-                        it.Checked = _scChecked.Contains(d);
-                        it.Checked = _gcChecked.Contains(d);
-                        it.Checked = _srChecked.Contains(d);
-                        it.Checked = _xsChecked.Contains(d);
-                        lvXsList.Items.Add(it);
-                    }
-                }
+                var paths = await ListFolderAsync(_xsFolder, rbXsFiles.Checked, patterns, ct);
+                if (ct.IsCancellationRequested) return;
+                FillScanList(lvXsList, paths ?? new List<string>(), _xsChecked, XsStatusColWidth, b => _xsBulkChange = b);
                 UpdateXsCounters();
-                _ = RecalcXsAsync();
+                if (paths == null) { SetXsStatus("Ready."); return; }
+
+                if (await ScanRowSizesAsync(lvXsList, ct, (it, size) => { ShowRowSize(it, size); if (it.Checked) UpdateXsCounters(); }))
+                    SetXsStatus($"Ready. {lvXsList.Items.Count} items.");
             }
-            catch (Exception ex)
-            {
-                Error("Xstation list error: " + ex.Message);
-            }
-            finally { lvXsList.EndUpdate(); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Error("Xstation list error: " + ex.Message); }
         }
 
         void UpdateXsCounters()
@@ -205,60 +162,6 @@ namespace SDBuilderWin
                 lblSizeXS.Text = $"Size: {FormatSize(total)}";
             }
             catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-        }
-
-        async Task RecalcXsAsync()
-        {
-            try
-            {
-                _xsScanCts?.Cancel();
-                _xsScanCts = new CancellationTokenSource();
-                var ct = _xsScanCts.Token;
-
-                await Task.Run(() =>
-                {
-                    foreach (ListViewItem it in lvXsList.Items)
-                    {
-                        if (ct.IsCancellationRequested) break;
-                        var path = it.Text;
-                        long size = 0;
-                        try
-                        {
-                            if (File.Exists(path))
-                            {
-                                size = new FileInfo(path).Length;
-                            }
-                            else if (Directory.Exists(path))
-                            {
-                                foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-                                {
-                                    if (ct.IsCancellationRequested) break;
-                                    try { size += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                                }
-                            }
-                            var sizeStr = FormatSize(size);
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add(sizeStr);
-                                else it.SubItems[1].Text = sizeStr;
-                                it.Tag = size;
-                                if (it.Checked) UpdateXsCounters();
-                            }));
-                        }
-                        catch
-                        {
-                            BeginInvoke(new Action(() =>
-                            {
-                                if (it.SubItems.Count < 2) it.SubItems.Add("error");
-                                else it.SubItems[1].Text = "error";
-                            }));
-                        }
-                    }
-                }, ct);
-
-                BeginInvoke(new Action(() => SetXsStatus($"Ready. {lvXsList.Items.Count} items.")));
-            }
-            catch { /* cancelled */ }
         }
 
         // ------------------- Firmware flows (unchanged) -------------------
