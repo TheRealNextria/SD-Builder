@@ -65,7 +65,8 @@ namespace SDBuilderWin.Dreamcast
                 var buf = new byte[0x100];
                 return fs.Read(buf, 0, buf.Length) == buf.Length ? Parse(buf) : null;
             }
-            catch { return null; }
+            catch (IOException) { return null; }              // unreadable: the caller falls back to info files
+            catch (UnauthorizedAccessException) { return null; }
         }
 
         /// <summary>
@@ -93,7 +94,8 @@ namespace SDBuilderWin.Dreamcast
                     return fs.Read(buf, 0, buf.Length) == buf.Length ? Parse(buf) : null;
                 }
             }
-            catch { }
+            catch (IOException) { }                           // unreadable: the caller falls back to info files
+            catch (UnauthorizedAccessException) { }
             return null;
         }
 

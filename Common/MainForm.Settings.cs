@@ -41,34 +41,32 @@ namespace SDBuilderWin
                         EjectPromptEnabled = dto.EjectPromptEnabled ?? false;
                         _lmFolder = dto.LmFolder ?? _lmFolder;
 
-                        // Restore window placement (optional)
-                        try
+                        // Restore window placement (optional; sizes below 200 px are ignored)
+                        if (dto.WindowW.HasValue && dto.WindowH.HasValue && dto.WindowW > 200 && dto.WindowH > 200)
                         {
-                            if (dto.WindowW.HasValue && dto.WindowH.HasValue && dto.WindowW > 200 && dto.WindowH > 200)
-                            {
-                                this.StartPosition = FormStartPosition.Manual;
-                                var x = dto.WindowX ?? this.Left;
-                                var y = dto.WindowY ?? this.Top;
-                                var w = dto.WindowW.Value;
-                                var h = dto.WindowH.Value;
-                                this.SetBounds(x, y, w, h);
-                            }
-                            if (dto.Maximized == true)
-                            {
-                                this.WindowState = FormWindowState.Maximized;
-                            }
+                            this.StartPosition = FormStartPosition.Manual;
+                            var x = dto.WindowX ?? this.Left;
+                            var y = dto.WindowY ?? this.Top;
+                            var w = dto.WindowW.Value;
+                            var h = dto.WindowH.Value;
+                            this.SetBounds(x, y, w, h);
                         }
-                        catch { /* ignore bad persisted values */ }
+                        if (dto.Maximized == true)
+                        {
+                            this.WindowState = FormWindowState.Maximized;
+                        }
                     }
                 }
             }
-            catch { Warn("Could not read settings.json, using defaults."); }
+            catch (IOException ex) { Warn($"Could not read settings.json, using defaults: {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Warn($"Could not read settings.json, using defaults: {ex.Message}"); }
+            catch (JsonException ex) { Warn($"settings.json is damaged, using defaults: {ex.Message}"); }
 
             numCopy.Value = Math.Clamp(CopyTimeout, (int)numCopy.Minimum, (int)numCopy.Maximum);
             numOW.Value = Math.Clamp(OverwriteTimeout, (int)numOW.Minimum, (int)numOW.Maximum);
             cmbAuto.SelectedItem = OverwriteAutoAction is "No" ? "No" : "Yes";
             chkOnlyRemovable.Checked = ShowOnlyRemovable;
-            try { chkEjectPrompt.Checked = EjectPromptEnabled; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            chkEjectPrompt.Checked = EjectPromptEnabled;
         }
 
         void SaveSettings()
@@ -86,11 +84,14 @@ namespace SDBuilderWin
     this.WindowState == FormWindowState.Maximized,
         EjectPromptEnabled
 );
-            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(ConfigFile, json, new UTF8Encoding(false));
+            // Use the new values even when they cannot be written to disk.
             CopyTimeout = (int)numCopy.Value;
             OverwriteTimeout = (int)numOW.Value;
             OverwriteAutoAction = (string)(cmbAuto.SelectedItem ?? "Yes");
+            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+            try { File.WriteAllText(ConfigFile, json, new UTF8Encoding(false)); }
+            catch (IOException ex) { Error($"Could not save settings.json: {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Error($"Could not save settings.json (no write access next to the .exe?): {ex.Message}"); }
         }
 
         record SettingsDTO(int CopyTimeout, int OverwriteTimeout, string? OverwriteAutoAction, bool? ShowOnlyRemovable, string? LmFolder, int? WindowX, int? WindowY, int? WindowW, int? WindowH, bool? Maximized, bool? EjectPromptEnabled);

@@ -80,72 +80,56 @@ namespace SDBuilderWin
             // Gamecube search debounce + wiring
             _gcFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
             _gcFilterDebounce.Tick += (_, __) => { _gcFilterDebounce!.Stop(); RefreshGamecubeList(); };
-            try
+            if (txtGcFilter != null)
             {
-                if (txtGcFilter != null)
+                txtGcFilter.TextChanged += (_, __) => { _gcFilterDebounce?.Stop(); _gcFilterDebounce?.Start(); };
+                txtGcFilter.KeyDown += (s, e) =>
                 {
-                    txtGcFilter.TextChanged += (_, __) => { _gcFilterDebounce?.Stop(); _gcFilterDebounce?.Start(); };
-                    txtGcFilter.KeyDown += (s, e) =>
+                    if (e.KeyCode == Keys.Enter)
                     {
-                        if (e.KeyCode == Keys.Enter)
-                        {
-                            e.Handled = true;
-                            e.SuppressKeyPress = true;
-                            _gcFilterDebounce?.Stop();
-                            RefreshGamecubeList();
-                        }
-                    };
-                }
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try
-            {
-                if (btnGcClearFilter != null && txtGcFilter != null)
-                {
-                    btnGcClearFilter.Click += (_, __) =>
-                    {
-                        txtGcFilter.Text = string.Empty;
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
                         _gcFilterDebounce?.Stop();
                         RefreshGamecubeList();
-                    };
-                }
+                    }
+                };
             }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            if (btnGcClearFilter != null && txtGcFilter != null)
+            {
+                btnGcClearFilter.Click += (_, __) =>
+                {
+                    txtGcFilter.Text = string.Empty;
+                    _gcFilterDebounce?.Stop();
+                    RefreshGamecubeList();
+                };
+            }
 
             // Dreamcast search debounce + wiring
             _dcFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
             _dcFilterDebounce.Tick += (_, __) => { _dcFilterDebounce!.Stop(); RefreshDreamcastList(); };
-            try
+            if (txtDcFilter != null)
             {
-                if (txtDcFilter != null)
+                txtDcFilter.TextChanged += (_, __) => { _dcFilterDebounce?.Stop(); _dcFilterDebounce?.Start(); };
+                txtDcFilter.KeyDown += (s, e) =>
                 {
-                    txtDcFilter.TextChanged += (_, __) => { _dcFilterDebounce?.Stop(); _dcFilterDebounce?.Start(); };
-                    txtDcFilter.KeyDown += (s, e) =>
+                    if (e.KeyCode == Keys.Enter)
                     {
-                        if (e.KeyCode == Keys.Enter)
-                        {
-                            e.Handled = true;
-                            e.SuppressKeyPress = true;
-                            _dcFilterDebounce?.Stop();
-                            RefreshDreamcastList();
-                        }
-                    };
-                }
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try
-            {
-                if (btnDcClearFilter != null && txtDcFilter != null)
-                {
-                    btnDcClearFilter.Click += (_, __) =>
-                    {
-                        txtDcFilter.Text = string.Empty;
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
                         _dcFilterDebounce?.Stop();
                         RefreshDreamcastList();
-                    };
-                }
+                    }
+                };
             }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            if (btnDcClearFilter != null && txtDcFilter != null)
+            {
+                btnDcClearFilter.Click += (_, __) =>
+                {
+                    txtDcFilter.Text = string.Empty;
+                    _dcFilterDebounce?.Stop();
+                    RefreshDreamcastList();
+                };
+            }
 
             // Wire Summercart64 controls (listmaker)
             WireSummercartListmaker();
@@ -230,7 +214,7 @@ namespace SDBuilderWin
                 btnGamecubeFw, cmbGamecubeList, btnGamecubeRefreshLists, btnGamecubeOpenLists, btnGamecubeStart,
                 null, null
             );
-            try { btnGamecubeCheats.Click += async (_, __) => await WithDriveJobAsync(InstallGamecubeCheats); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            btnGamecubeCheats.Click += async (_, __) => await WithDriveJobAsync(InstallGamecubeCheats);
 
             WirePlatformTab(
                 Platform.Dreamcast,
@@ -250,39 +234,31 @@ namespace SDBuilderWin
             // Xstation search debounce + wiring
             _xsFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
             _xsFilterDebounce.Tick += (_, __) => { _xsFilterDebounce!.Stop(); RefreshXstationList(); };
-            try
+            if (txtXsFilter != null)
             {
-                if (txtXsFilter != null)
+                txtXsFilter.TextChanged += (_, __) => { _xsFilterDebounce?.Stop(); _xsFilterDebounce?.Start(); };
+                txtXsFilter.KeyDown += (s, e) =>
                 {
-                    txtXsFilter.TextChanged += (_, __) => { _xsFilterDebounce?.Stop(); _xsFilterDebounce?.Start(); };
-                    txtXsFilter.KeyDown += (s, e) =>
+                    if (e.KeyCode == Keys.Enter)
                     {
-                        if (e.KeyCode == Keys.Enter)
-                        {
-                            e.Handled = true;
-                            e.SuppressKeyPress = true;
-                            _xsFilterDebounce?.Stop();
-                            RefreshXstationList();
-                        }
-                    };
-
-                    try
-                    {
-                        if (btnXsClearFilter != null && txtXsFilter != null)
-                        {
-                            btnXsClearFilter.Click += (_, __) =>
-                            {
-                                txtXsFilter.Text = string.Empty;
-                                _xsFilterDebounce?.Stop();
-                                RefreshXstationList();
-                            };
-                        }
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
+                        _xsFilterDebounce?.Stop();
+                        RefreshXstationList();
                     }
-                    catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                };
 
+                if (btnXsClearFilter != null && txtXsFilter != null)
+                {
+                    btnXsClearFilter.Click += (_, __) =>
+                    {
+                        txtXsFilter.Text = string.Empty;
+                        _xsFilterDebounce?.Stop();
+                        RefreshXstationList();
+                    };
                 }
+
             }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
 
 
             // Live filter as you type
@@ -290,7 +266,7 @@ namespace SDBuilderWin
             txtFilter.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.Handled = true; _lmFilterDebounce?.Stop(); RefreshListmakerList(); } };
 
             // Always include subfolders; hide the checkbox to simplify UI
-            try { chkRecursive.Checked = true; chkRecursive.Visible = false; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            chkRecursive.Checked = true; chkRecursive.Visible = false;
             WireListContextMenu();
 
             // Drag & drop for Listmaker
@@ -348,46 +324,37 @@ namespace SDBuilderWin
                 _lmFolder = string.Empty;
                 if (lvList != null)
                 {
-                    try
-                    {
-                        lvList.Items.Clear();
-                        SetLmStatus("Choose a folder or open a .txt file to begin.");
-                    }
-                    catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                    lvList.Items.Clear();
+                    SetLmStatus("Choose a folder or open a .txt file to begin.");
                 }
-                // Auto-refresh Listmaker on startup if last folder exists (minimal fix)
-                try { if (!string.IsNullOrWhiteSpace(_lmFolder) && System.IO.Directory.Exists(_lmFolder)) RefreshListmakerList(); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
 
                 // Clear all ListBox controls on startup so previous session entries don't persist
-                try { foreach (var lb in FindListBoxes(this)) lb.Items.Clear(); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                foreach (var lb in FindListBoxes(this)) lb.Items.Clear();
                 this.FormClosing += (_, __) => SaveSettings();
                 if (!File.Exists("settings.json"))
                 {
                     SaveSettings();
                 }
-                try { chkEjectPrompt.CheckedChanged += (_, __) => { EjectPromptEnabled = chkEjectPrompt.Checked; SaveSettings(); }; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                chkEjectPrompt.CheckedChanged += (_, __) => { EjectPromptEnabled = chkEjectPrompt.Checked; SaveSettings(); };
                 RefreshDrives();
                 Info($"GameLists dir: {GameListsDir}");
-                // Start GameLists poller (fallback if FileSystemWatcher misses events)
-                try
+                // Start GameLists poller (fallback if FileSystemWatcher misses events).
+                // GetGameListsSignature / RefreshAllGameLists handle (and report) read errors themselves.
+                _glLastSig = GetGameListsSignature();
+                RefreshAllGameLists();
+                _glPoll?.Stop();
+                _glPoll?.Dispose();
+                _glPoll = new System.Windows.Forms.Timer { Interval = 1500 };
+                _glPoll.Tick += (_, __) =>
                 {
-                    _glLastSig = GetGameListsSignature();
-                    RefreshAllGameLists();
-                    _glPoll?.Stop();
-                    _glPoll?.Dispose();
-                    _glPoll = new System.Windows.Forms.Timer { Interval = 1500 };
-                    _glPoll.Tick += (_, __) =>
+                    var sig = GetGameListsSignature();
+                    if (!string.Equals(sig, _glLastSig, StringComparison.Ordinal))
                     {
-                        var sig = GetGameListsSignature();
-                        if (!string.Equals(sig, _glLastSig, StringComparison.Ordinal))
-                        {
-                            _glLastSig = sig;
-                            BeginInvoke(new Action(RefreshAllGameLists));
-                        }
-                    };
-                    _glPoll.Start();
-                }
-                catch { /* ignore */ }
+                        _glLastSig = sig;
+                        BeginInvoke(new Action(RefreshAllGameLists));
+                    }
+                };
+                _glPoll.Start();
 
                 // initial populate for all platform combos
                 RefreshAllGameLists();
@@ -417,13 +384,6 @@ namespace SDBuilderWin
                 UpdateDriveButtonsEnabled();
                 PositionVersionLabel();
 
-                // Disabled auto-load of last folder on startup (Option 2)
-                // if (Directory.Exists(_lmFolder))
-                {
-                    SetLmStatus("Loading...");
-                    RefreshListmakerList();
-                }
-
                 // Ensure Listmaker starts empty on launch (avoid repopulating from previous session)
                 if (lvList != null)
                 {
@@ -434,25 +394,23 @@ namespace SDBuilderWin
                     }
                     finally
                     {
-                        try
-                        {
-                            lvList.EndUpdate();
-                            _lmBulkChange = false;
-                        }
-                        catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                        lvList.EndUpdate();
+                        _lmBulkChange = false;
                     }
                 }
-                try { SetLmStatus("Choose a folder or open a .txt file to begin."); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-                try { SetCounters(0, 0); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                SetLmStatus("Choose a folder or open a .txt file to begin.");
+                SetCounters(0, 0);
             };
 
             FormClosed += (_, __) =>
             {
                 if (_hotplugTimer != null)
                 {
-                    _hotplugTimer.Stop(); _hotplugTimer.Dispose(); try { _gcScanCts?.Cancel(); _gcScanCts?.Dispose(); _gcScanCts = null; } catch { }
+                    _hotplugTimer.Stop(); _hotplugTimer.Dispose();
                 }
-                _lmScanCts?.Cancel();
+                // Stop background list scans (they check IsDisposed before touching the window anyway).
+                foreach (var cts in new[] { _xsScanCts, _srScanCts, _gcScanCts, _scScanCts, _dcScanCts, _lmScanCts, _lmListCts })
+                    cts?.Cancel();
             };
         }
         // ---------- Layout helpers that depend on Designer controls ----------

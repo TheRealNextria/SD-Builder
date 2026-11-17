@@ -89,16 +89,12 @@ namespace SDBuilderWin
             lvGcList.ItemChecked += (s, e) =>
             {
                 if (_gcBulkChange) return;
-                try
+                var it = e?.Item as ListViewItem;
+                if (it != null)
                 {
-                    var it = e?.Item as ListViewItem;
-                    if (it != null)
-                    {
-                        var path = it.Text;
-                        if (it.Checked) _gcChecked.Add(path); else _gcChecked.Remove(path);
-                    }
+                    var path = it.Text;
+                    if (it.Checked) _gcChecked.Add(path); else _gcChecked.Remove(path);
                 }
-                catch { /* ignore */ }
                 UpdateGcCounters();
             };
 
@@ -126,7 +122,7 @@ namespace SDBuilderWin
 
         void SetGcStatus(string text)
         {
-            try { lblStatusGC.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblStatusGC.Text = text;
         }
 
         void UpdateGcCounters()
@@ -139,12 +135,8 @@ namespace SDBuilderWin
                 count++;
                 if (it.Tag is long sz) total += sz;
             }
-            try
-            {
-                lblCountGC.Text = $"Checked: {count}";
-                lblSizeGC.Text = $"Size: {FormatSize(total)}";
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblCountGC.Text = $"Checked: {count}";
+            lblSizeGC.Text = $"Size: {FormatSize(total)}";
         }
 
         void RefreshGamecubeList() => _ = RefreshGamecubeListAsync();
@@ -271,7 +263,10 @@ namespace SDBuilderWin
                         installedR = ParseR(v.GetString() ?? string.Empty);
                     }
                 }
-                catch { /* ignore parse errors */ }
+                catch (IOException ex) { Warn($"Could not read the Swiss marker, installed version unknown: {ex.Message}"); }
+                catch (UnauthorizedAccessException ex) { Warn($"Could not read the Swiss marker, installed version unknown: {ex.Message}"); }
+                catch (JsonException ex) { Warn($"Swiss marker is damaged, installed version unknown: {ex.Message}"); }
+                catch (InvalidOperationException ex) { Warn($"Swiss marker is damaged, installed version unknown: {ex.Message}"); } // "version" is not a string
             }
             if (installedR >= 0 && latestR >= 0)
             {
@@ -290,7 +285,9 @@ namespace SDBuilderWin
             if (rc != 0) throw new Exception($"7zr extraction failed (rc={rc})");
 
             foreach (var dir in Directory.EnumerateDirectories(G_Extract, "Legacy", SearchOption.AllDirectories))
-                try { Directory.Delete(dir, true); Info($"Removed Legacy directory: {dir}"); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                try { Directory.Delete(dir, true); Info($"Removed Legacy directory: {dir}"); }
+                    catch (IOException ex) { Warn($"Could not remove Legacy directory '{dir}': {ex.Message}"); }
+                    catch (UnauthorizedAccessException ex) { Warn($"Could not remove Legacy directory '{dir}': {ex.Message}"); }
 
             var defaultDol = Path.Combine(G_Extract, @"swiss_r1913\DOL\swiss_r1913.dol");
             string? src = File.Exists(defaultDol) ? defaultDol : Directory.EnumerateFiles(G_Extract, "swiss_*.dol", SearchOption.AllDirectories).FirstOrDefault();
@@ -304,11 +301,14 @@ namespace SDBuilderWin
             if (!srcLeaf.Equals("IPL.dol", StringComparison.OrdinalIgnoreCase))
             {
                 try { if (File.Exists(ipl)) File.Delete(ipl); File.Move(copied, ipl); }
-                catch { File.Copy(copied, ipl, true); File.Delete(copied); }
+                catch (IOException) { File.Copy(copied, ipl, true); File.Delete(copied); } // rename failed: copy instead
+                catch (UnauthorizedAccessException) { File.Copy(copied, ipl, true); File.Delete(copied); }
             }
 
             var legacyOnSd = Path.Combine(gcBase, "Legacy");
-            if (Directory.Exists(legacyOnSd)) try { Directory.Delete(legacyOnSd, true); Info("Removed Legacy directory from SD root."); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            if (Directory.Exists(legacyOnSd)) try { Directory.Delete(legacyOnSd, true); Info("Removed Legacy directory from SD root."); }
+                catch (IOException ex) { Warn($"Could not remove '{legacyOnSd}': {ex.Message}"); }
+                catch (UnauthorizedAccessException ex) { Warn($"Could not remove '{legacyOnSd}': {ex.Message}"); }
             Info($"IPL.dol installed → {gcBase}");
 
             // --- Write hidden marker with install metadata
@@ -340,13 +340,12 @@ namespace SDBuilderWin
                         File.SetAttributes(mp, attrs | FileAttributes.Hidden);
                     }
                 }
-                catch { /* best-effort hide */ }
+                catch (IOException) { }                    // only cosmetic: the marker works when visible too
+                catch (UnauthorizedAccessException) { }
                 Info("Swiss marker written (.swiss.install.json).");
             }
-            catch (Exception ex)
-            {
-                Info($"Warning: could not write Swiss marker: {ex.Message}");
-            }
+            catch (IOException ex) { Warn($"Could not write Swiss marker (update check will not know the installed version): {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Warn($"Could not write Swiss marker (update check will not know the installed version): {ex.Message}"); }
             EnsureRemoved(G_Work);
         }
         async Task Ensure7zr(CancellationToken token)

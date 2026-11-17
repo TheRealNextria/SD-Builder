@@ -111,9 +111,9 @@ namespace SDBuilderWin.Dreamcast
                 var leaf = Path.GetFileName(dir);
                 if (leaf.Length < 2 || !leaf.All(char.IsDigit)) continue;
                 if (!int.TryParse(leaf, out var number) || number <= 1) continue;
-                if (!SafeGetFiles(dir, "*.*").Any(f => IsDiscImage(f))) continue;
+                if (!SafeGetFiles(dir, "*.*", _log).Any(f => IsDiscImage(f))) continue;
 
-                result.Add(ReadEntry(dir, number));
+                result.Add(ReadEntry(dir, number, _log));
             }
             result.Sort((a, b) => a.Number.CompareTo(b.Number));
             return result;
@@ -125,14 +125,14 @@ namespace SDBuilderWin.Dreamcast
             return ext == ".gdi" || ext == ".cdi" || ext == ".ccd" || ext == ".mds";
         }
 
-        static DcMenuEntry ReadEntry(string dir, int number)
+        static DcMenuEntry ReadEntry(string dir, int number, Action<string>? log = null)
         {
             var e = new DcMenuEntry { Number = number, Folder = dir, Name = Path.GetFileName(dir) };
 
             // 1) IP.BIN straight from the disc image (like GDMENUCardManager)
             DcIpBin? ip = null;
             var gdi = Path.Combine(dir, "disc.gdi");
-            if (!File.Exists(gdi)) gdi = SafeGetFiles(dir, "*.gdi").FirstOrDefault() ?? "";
+            if (!File.Exists(gdi)) gdi = SafeGetFiles(dir, "*.gdi", log).FirstOrDefault() ?? "";
             if (gdi.Length > 0) ip = DcIpBin.FromGdi(gdi);
 
             if (ip != null)
@@ -150,7 +150,7 @@ namespace SDBuilderWin.Dreamcast
             {
                 // 2) infoNN.txt written by SD-Builder when the game was copied (covers .cdi images)
                 var nn = Path.GetFileName(dir);
-                var info = ReadInfoFile(Path.Combine(dir, "info" + nn + ".txt"), nn);
+                var info = ReadInfoFile(Path.Combine(dir, "info" + nn + ".txt"), nn, log);
                 if (info.Count > 0)
                 {
                     e.Source = "info" + nn + ".txt";
@@ -165,16 +165,16 @@ namespace SDBuilderWin.Dreamcast
             }
 
             // 3) name.txt / serial.txt win, so a user-edited title shows up in the menu (GDMENUCardManager behaviour)
-            var nameTxt = ReadFirstLine(Path.Combine(dir, "name.txt"));
+            var nameTxt = ReadFirstLine(Path.Combine(dir, "name.txt"), log);
             if (!string.IsNullOrWhiteSpace(nameTxt)) e.Name = nameTxt!.Trim();
-            var serialTxt = ReadFirstLine(Path.Combine(dir, "serial.txt"));
+            var serialTxt = ReadFirstLine(Path.Combine(dir, "serial.txt"), log);
             if (!string.IsNullOrWhiteSpace(serialTxt)) e.Serial = serialTxt!.Trim();
 
             if (string.IsNullOrWhiteSpace(e.Name)) e.Name = Path.GetFileName(dir);
             return e;
         }
 
-        static Dictionary<string, string> ReadInfoFile(string path, string nn)
+        static Dictionary<string, string> ReadInfoFile(string path, string nn, Action<string>? log = null)
         {
             var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (!File.Exists(path)) return d;
@@ -189,7 +189,8 @@ namespace SDBuilderWin.Dreamcast
                     d[line.Substring(dot + 1, eq - dot - 1).Trim()] = line.Substring(eq + 1).Trim();
                 }
             }
-            catch { }
+            catch (IOException ex) { ReportUnreadable(log, path, ex); }
+            catch (UnauthorizedAccessException ex) { ReportUnreadable(log, path, ex); }
             return d;
         }
 
@@ -312,7 +313,9 @@ namespace SDBuilderWin.Dreamcast
             }
             finally
             {
-                try { if (Directory.Exists(temp)) Directory.Delete(temp, true); } catch { }
+                try { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+                catch (IOException ex) { _log($"[DC menu] [WARN] Could not remove temp folder {temp}: {ex.Message}"); }
+                catch (UnauthorizedAccessException ex) { _log($"[DC menu] [WARN] Could not remove temp folder {temp}: {ex.Message}"); }
             }
 
             return new DcMenuBuildResult
@@ -412,7 +415,9 @@ namespace SDBuilderWin.Dreamcast
             }
             finally
             {
-                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                try { if (File.Exists(tmp)) File.Delete(tmp); }
+                catch (IOException ex) { _log($"[DC menu] [WARN] Could not remove temp file {tmp}: {ex.Message}"); }
+                catch (UnauthorizedAccessException ex) { _log($"[DC menu] [WARN] Could not remove temp file {tmp}: {ex.Message}"); }
             }
         }
 
@@ -454,20 +459,32 @@ namespace SDBuilderWin.Dreamcast
                 CopyDirectory(d, Path.Combine(dest, Path.GetFileName(d)));
         }
 
-        static string[] SafeGetFiles(string dir, string pattern)
+        // An unreadable folder counts as empty; with a log it is reported (the game is then left out of the menu).
+        static string[] SafeGetFiles(string dir, string pattern, Action<string>? log = null)
         {
             try { return Directory.GetFiles(dir, pattern, SearchOption.TopDirectoryOnly); }
-            catch { return Array.Empty<string>(); }
+            catch (IOException ex) { ReportUnreadable(log, dir, ex); return Array.Empty<string>(); }
+            catch (UnauthorizedAccessException ex) { ReportUnreadable(log, dir, ex); return Array.Empty<string>(); }
         }
 
-        static string? ReadFirstLine(string path)
+        /// <summary>"[DC menu] [WARN] Could not read \05\name.txt: …" (the path is shown from the game folder on).</summary>
+        static void ReportUnreadable(Action<string>? log, string path, Exception ex)
+        {
+            if (log == null) return;
+            var parent = Path.GetFileName(Path.GetDirectoryName(path) ?? "");
+            var shortPath = string.IsNullOrEmpty(parent) ? path : $"\\{parent}\\{Path.GetFileName(path)}";
+            log($"[DC menu] [WARN] Could not read {shortPath}: {ex.Message}");
+        }
+
+        static string? ReadFirstLine(string path, Action<string>? log = null)
         {
             try
             {
                 if (!File.Exists(path)) return null;
                 return File.ReadLines(path).Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
             }
-            catch { return null; }
+            catch (IOException ex) { ReportUnreadable(log, path, ex); return null; }
+            catch (UnauthorizedAccessException ex) { ReportUnreadable(log, path, ex); return null; }
         }
     }
 }

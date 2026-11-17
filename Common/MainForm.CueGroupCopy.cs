@@ -153,7 +153,7 @@ namespace SDBuilderWin
                 {
                     if (File.ReadLines(c).Any(l => l.IndexOf(fname, StringComparison.OrdinalIgnoreCase) >= 0)) return c;
                 }
-                catch (IOException) { }
+                catch (IOException) { }                 // unreadable .cue: try the next one
                 catch (UnauthorizedAccessException) { }
             }
             return null;
@@ -186,6 +186,7 @@ namespace SDBuilderWin
                     if (File.Exists(full) && !result.Contains(full, StringComparer.OrdinalIgnoreCase)) result.Add(full);
                 }
             }
+            // Unreadable .cue: only the .cue itself is in the set; copying it then fails and robocopy reports why.
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             return result;

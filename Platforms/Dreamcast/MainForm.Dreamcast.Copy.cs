@@ -20,17 +20,18 @@ namespace SDBuilderWin
             public Dictionary<string, string> Serials = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<string, HashSet<string>> SerialDiscs = new(StringComparer.OrdinalIgnoreCase);
 
-            public static DcCardIndex Read(string destRoot) => new DcCardIndex
+            public static DcCardIndex Read(string destRoot, Action<string>? warn = null) => new DcCardIndex
             {
-                Serials = IndexDcSerials(destRoot),
-                SerialDiscs = IndexDcSerialDiscs(destRoot),
+                Serials = IndexDcSerials(destRoot, warn),
+                SerialDiscs = IndexDcSerialDiscs(destRoot, warn),
             };
         }
 
         // The card index reads every \NN folder and the serial check reads IP.BIN from the source (often the NAS):
         // both run on a background thread so the window keeps responding during a copy job.
-        static Task<DcCardIndex> ReadDcCardIndexAsync(string destRoot, CancellationToken token) =>
-            Task.Run(() => DcCardIndex.Read(destRoot), token);
+        // Unreadable info files are logged: such a game is not recognised and could be copied again.
+        Task<DcCardIndex> ReadDcCardIndexAsync(string destRoot, CancellationToken token) =>
+            Task.Run(() => DcCardIndex.Read(destRoot, msg => Warn(msg + " (duplicate check may miss this game)")), token);
 
         Task<bool> IsDcGameAlreadyOnCardAsync(string source, DcCardIndex index, CancellationToken token) =>
             Task.Run(() => IsDcGameAlreadyOnCard(source, index), token);
@@ -126,6 +127,7 @@ namespace SDBuilderWin
                         if (!files.Contains(f, StringComparer.OrdinalIgnoreCase)) files.Add(f);
                 }
             }
+            // Unreadable image: only the image file itself is copied; robocopy then reports why it fails.
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
             return files;
@@ -150,13 +152,22 @@ namespace SDBuilderWin
         {
             try
             {
-                if (!TryExtractDcIpMetadata(dcDest, out var title, out var serial)) return;
+                if (!TryExtractDcIpMetadata(dcDest, out var title, out var serial))
+                {
+                    // A .cdi has no readable IP.BIN here, so only a .gdi without info is worth reporting.
+                    if (File.Exists(Path.Combine(dcDest, "disc.gdi")))
+                        Warn($"No game info (IP.BIN) found in \\{Path.GetFileName(dcDest)}: name.txt / serial.txt not written.");
+                    return;
+                }
                 if (!string.IsNullOrWhiteSpace(title)) File.WriteAllText(Path.Combine(dcDest, "name.txt"), SanitizeMenuTitle32(title));
                 if (!string.IsNullOrWhiteSpace(serial)) File.WriteAllText(Path.Combine(dcDest, "serial.txt"), serial);
                 WriteDcInfoFile(dcDest, title ?? "", serial ?? "");
             }
-            catch (IOException ex) { Warn($"Could not write game info in \\{Path.GetFileName(dcDest)}: {ex.Message}"); }
-            catch (UnauthorizedAccessException ex) { Warn($"Could not write game info in \\{Path.GetFileName(dcDest)}: {ex.Message}"); }
+            // The game itself is on the card; missing info files are reported, the job continues with the next game.
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Warn($"Could not write game info in \\{Path.GetFileName(dcDest)}: {ex.Message}");
+            }
         }
     }
 }

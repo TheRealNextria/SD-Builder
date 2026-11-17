@@ -98,23 +98,18 @@ namespace SDBuilderWin
 
             void SetScStatus(string text)
             {
-                try { lblStatusSC.Text = text; } catch { /* ignore */ }
+                lblStatusSC.Text = text;
             }
             void UpdateScCounters()
             {
-                try
+                int checkedCount = 0;
+                long bytes = 0;
+                foreach (ListViewItem it in lvScList.Items)
                 {
-                    int total = lvScList.Items.Count;
-                    int checkedCount = 0;
-                    long bytes = 0;
-                    foreach (ListViewItem it in lvScList.Items)
-                    {
-                        if (it.Checked) { checkedCount++; if (it.Tag is long b) bytes += b; }
-                    }
-                    lblCountSC.Text = $"Checked: {checkedCount}";
-                    lblSizeSC.Text = $"Size: {FormatSize(bytes)}";
+                    if (it.Checked) { checkedCount++; if (it.Tag is long b) bytes += b; }
                 }
-                catch { /* ignore */ }
+                lblCountSC.Text = $"Checked: {checkedCount}";
+                lblSizeSC.Text = $"Size: {FormatSize(bytes)}";
             }
 
             btnScChoose.Click += (_, __) =>

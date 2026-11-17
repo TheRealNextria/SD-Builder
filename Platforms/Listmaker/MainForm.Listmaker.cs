@@ -36,14 +36,14 @@ namespace SDBuilderWin
                 _lmChecked.Clear();
                 lvList.BeginUpdate();
                 lvList.Items.Clear();
-                try { SetCounters(0, 0); } catch { /* best-effort */ }
+                SetCounters(0, 0);
             }
             finally
             {
-                try { lvList.EndUpdate(); } catch { /* ignore */ }
+                lvList.EndUpdate();
                 _lmBulkChange = false;
             }
-            try { SetLmStatus("Choose a folder or open a .txt file to begin."); } catch { /* ignore */ }
+            SetLmStatus("Choose a folder or open a .txt file to begin.");
         }
 
         // Settings (defaults)
@@ -132,18 +132,14 @@ namespace SDBuilderWin
                     lvList.EndUpdate();
                     _lmBulkChange = false;
                 }
-                try
+                foreach (ListViewItem it in lvList.Items)
                 {
-                    foreach (ListViewItem it in lvList.Items)
-                    {
-                        var p = it.Text;
-                        if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Add(p);
-                    }
+                    var p = it.Text;
+                    if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Add(p);
                 }
-                catch { }
                 _lmDebounce?.Stop(); _lmDebounce?.Start();
             };
-            try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p) && it.Checked) _lmChecked.Add(p); } } catch { }
+            foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p) && it.Checked) _lmChecked.Add(p); }
             ;
             btnUncheckAll.Click += (_, __) =>
             {
@@ -162,18 +158,14 @@ namespace SDBuilderWin
                     lvList.EndUpdate();
                     _lmBulkChange = false;
                 }
-                try
+                foreach (ListViewItem it in lvList.Items)
                 {
-                    foreach (ListViewItem it in lvList.Items)
-                    {
-                        var p = it.Text;
-                        if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p);
-                    }
+                    var p = it.Text;
+                    if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p);
                 }
-                catch { }
                 _lmDebounce?.Stop(); _lmDebounce?.Start();
             };
-            try { foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p); } } catch { }
+            foreach (ListViewItem it in lvList.Items) { var p = it.Text; if (!string.IsNullOrWhiteSpace(p)) _lmChecked.Remove(p); }
             ;
             btnDeleteSelected.Click += (_, __) =>
             {
@@ -255,16 +247,9 @@ namespace SDBuilderWin
 
         void SetLmStatus(object? textObj)
         {
-            try
-            {
-                string text = textObj?.ToString() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(text))
-                    lblStatusLM.Text = text;
-            }
-            catch (Exception ex)
-            {
-                Warn("Exception suppressed: " + ex.Message);
-            }
+            string text = textObj?.ToString() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(text))
+                lblStatusLM.Text = text;
         }
         // ------------------- Listmaker helpers -------------------
         void UpdateLmTotalsFromItems()

@@ -29,11 +29,12 @@ namespace SDBuilderWin
         System.Windows.Forms.Timer? _glDebounce;
         void RefreshAllGameLists()
         {
-            try { PopulateListCombo(cmbXstationList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try { PopulateListCombo(cmbSarooList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try { PopulateListCombo(cmbGamecubeList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try { PopulateListCombo(cmbDreamcastList); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-            try { PopulateListCombo(cmbSC64List); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            // PopulateListCombo logs its own read errors.
+            PopulateListCombo(cmbXstationList);
+            PopulateListCombo(cmbSarooList);
+            PopulateListCombo(cmbGamecubeList);
+            PopulateListCombo(cmbDreamcastList);
+            PopulateListCombo(cmbSC64List);
         }
 
 
@@ -48,7 +49,10 @@ namespace SDBuilderWin
                                      .OrderBy(x => x);
                 return string.Join(";", files);
             }
-            catch { return ""; }
+            // Polled every few seconds: a folder that cannot be read just means "no change detected";
+            // PopulateListCombo reports the error when the lists are refreshed.
+            catch (IOException) { return ""; }
+            catch (UnauthorizedAccessException) { return ""; }
         }
 
         void WirePlatformTab(
@@ -226,7 +230,8 @@ namespace SDBuilderWin
                 foreach (var f in files) combo.Items.Add(new ComboItem(Path.GetFileNameWithoutExtension(f), f));
                 if (combo.Items.Count > 0) combo.SelectedIndex = 0;
             }
-            catch (Exception ex) { Warn("Could not enumerate GameLists: " + ex.Message); }
+            catch (IOException ex) { Warn("Could not read the GameLists folder: " + ex.Message); }
+            catch (UnauthorizedAccessException ex) { Warn("Could not read the GameLists folder: " + ex.Message); }
         }
         string? GetSelectedListPath(ComboBox combo) => combo.SelectedItem is ComboItem ci ? ci.FullPath : null;
         sealed class ComboItem

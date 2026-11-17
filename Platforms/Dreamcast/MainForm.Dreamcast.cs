@@ -36,7 +36,7 @@ namespace SDBuilderWin
         // ------------------- Dreamcast helpers -------------------
         void SetDcStatus(string text)
         {
-            try { lblStatusDC.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblStatusDC.Text = text;
         }
 
         void WireDreamcastListmaker()
@@ -57,16 +57,12 @@ namespace SDBuilderWin
             // Guard: block checking of rows marked as Installed (uses DcMeta on ListViewItem.Tag)
             lvDcList.ItemCheck += (_, e) =>
             {
-                try
+                if (_dcBulkChange) return; // allow programmatic changes
+                var it = lvDcList.Items[e.Index];
+                if (it?.Tag is DcMeta m && m.Installed)
                 {
-                    if (_dcBulkChange) return; // allow programmatic changes
-                    var it = lvDcList.Items[e.Index];
-                    if (it?.Tag is DcMeta m && m.Installed)
-                    {
-                        e.NewValue = CheckState.Unchecked;
-                    }
+                    e.NewValue = CheckState.Unchecked;
                 }
-                catch { /* ignore */ }
             };
             // ===== END Dreamcast UI wiring =====
 
@@ -98,15 +94,11 @@ namespace SDBuilderWin
             lvDcList.ItemChecked += (_, __) =>
             {
                 if (_dcBulkChange) return;
-                try
+                if (lvDcList.FocusedItem is ListViewItem it && it != null)
                 {
-                    if (lvDcList.FocusedItem is ListViewItem it && it != null)
-                    {
-                        var path = it.Text;
-                        if (it.Checked) _dcChecked.Add(path); else _dcChecked.Remove(path);
-                    }
+                    var path = it.Text;
+                    if (it.Checked) _dcChecked.Add(path); else _dcChecked.Remove(path);
                 }
-                catch { /* ignore */ }
                 UpdateDcCounters();
             };
 
@@ -141,7 +133,7 @@ namespace SDBuilderWin
             btnDcStart.Click += async (_, __) =>
             {
                 await WithDriveJobAsync((d, token) => CopyDreamcastCheckedAsync(d, token));
-                try { BeginInvoke(new Action(() => RefreshDreamcastList())); } catch { }
+                RefreshDreamcastList(); // also after a failed or cancelled job: show what is on the card now
             };
         }
 
@@ -158,12 +150,8 @@ namespace SDBuilderWin
                 if (it.Tag is DcMeta md) total += md.Size;
                 else if (it.Tag is long sz) total += sz; // legacy fallback
             }
-            try
-            {
-                lblCountDC.Text = $"Checked: {count}";
-                lblSizeDC.Text = $"Size: {FormatSize(total)}";
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblCountDC.Text = $"Checked: {count}";
+            lblSizeDC.Text = $"Size: {FormatSize(total)}";
 
         }
 
@@ -299,16 +287,14 @@ namespace SDBuilderWin
         static string NextDreamcastIndexFolder(string root)
         {
             var used = new HashSet<int>();
-            try
+            // No try/catch on purpose: if the card cannot be read we must not guess a "free" folder
+            // (that could overwrite a game). The exception stops the copy job and is logged.
+            foreach (var dir in Directory.EnumerateDirectories(root))
             {
-                foreach (var dir in Directory.EnumerateDirectories(root))
-                {
-                    var name = Path.GetFileName(dir);
-                    if (int.TryParse(name, out int num) && num >= 1 && num <= 9999)
-                        used.Add(num);
-                }
+                var name = Path.GetFileName(dir);
+                if (int.TryParse(name, out int num) && num >= 1 && num <= 9999)
+                    used.Add(num);
             }
-            catch { /* ignore */ }
 
             for (int i = 2; i <= 9999; i++)
                 if (!used.Contains(i))
@@ -358,13 +344,7 @@ namespace SDBuilderWin
                 await CopyDreamcastGameAsync(path, destRoot, token);
             }
 
-            Info("Dreamcast copy complete.");
-
-            try
-            {
-                BeginInvoke(new Action(() => RefreshDreamcastList()));
-            }
-            catch { /* ignore refresh errors */ }
+            Info("Dreamcast copy complete."); // btnDcStart refreshes the list after the job
 
         }        // ===== END Dreamcast Copy routine =====
 
@@ -381,8 +361,7 @@ namespace SDBuilderWin
         // Helper: true if ListViewItem.Tag is DcMeta with Installed=true
         private static bool DcIsInstalled(ListViewItem it)
         {
-            try { return it?.Tag is DcMeta m && m.Installed; }
-            catch { return false; }
+            return it?.Tag is DcMeta m && m.Installed;
         }
     }
 }

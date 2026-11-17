@@ -159,9 +159,9 @@ namespace SDBuilderWin
                 else { lbl.Text = $"Auto-continue in {remaining}s… (press Continue or Cancel)"; }
             };
             dlg.Shown += (_, __) => t.Start();
-            btnCancelAll.Click += (_, __) => { try { _cts?.Cancel(); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } };
+            btnCancelAll.Click += (_, __) => CancelRunningJob();
 
-            token.Register(() => { try { if (!dlg.IsDisposed) dlg.BeginInvoke(new Action(() => { dlg.DialogResult = DialogResult.Cancel; dlg.Close(); })); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } });
+            token.Register(() => CloseDialogAsCancelled(dlg));
 
             dlg.Controls.AddRange(new Control[] { lbl, btnContinue, btnCancelAll });
             dlg.AcceptButton = btnContinue;
@@ -196,8 +196,8 @@ namespace SDBuilderWin
                 else dlg.Text = $"Confirm replace – auto {(autoNo ? "No" : "Yes")} in {remaining}s";
             };
             dlg.Shown += (_, __) => t.Start();
-            btnCancel.Click += (_, __) => { try { _cts?.Cancel(); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } };
-            if (token.HasValue) token.Value.Register(() => { try { if (!dlg.IsDisposed) dlg.BeginInvoke(new Action(() => { dlg.DialogResult = DialogResult.Cancel; dlg.Close(); })); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } });
+            btnCancel.Click += (_, __) => CancelRunningJob();
+            if (token.HasValue) token.Value.Register(() => CloseDialogAsCancelled(dlg));
             dlg.Controls.AddRange(new Control[] { lbl, btnYes, btnNo, btnCancel });
             var res = dlg.ShowDialog(this);
             t.Stop();
@@ -206,6 +206,23 @@ namespace SDBuilderWin
             return ReplaceDecision.Cancel;
         }
 
+
+        void CancelRunningJob()
+        {
+            try { _cts?.Cancel(); }
+            catch (ObjectDisposedException) { } // the job finished in the meantime: nothing left to cancel
+        }
+
+        /// <summary>Called from a cancellation callback (any thread): close the dialog with Cancel if it is still open.</summary>
+        static void CloseDialogAsCancelled(Form dlg)
+        {
+            try
+            {
+                if (!dlg.IsDisposed && dlg.IsHandleCreated)
+                    dlg.BeginInvoke(new Action(() => { dlg.DialogResult = DialogResult.Cancel; dlg.Close(); }));
+            }
+            catch (InvalidOperationException) { } // the dialog closed between the check and the call (also ObjectDisposedException)
+        }
 
         // Helper: enumerate all ListBox controls for startup clear
         IEnumerable<ListBox> FindListBoxes(Control root)
@@ -237,12 +254,18 @@ namespace SDBuilderWin
         // ===== Helpers START =====
         void ExpandZip(string zipPath, string dest)
         {
-            if (Directory.Exists(dest)) { try { Directory.Delete(dest, true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } }
+            EnsureRemoved(dest);
             Directory.CreateDirectory(dest);
             Info($"Extracting ZIP → {dest}");
             ZipFile.ExtractToDirectory(zipPath, dest);
         }
-        void EnsureRemoved(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); else if (File.Exists(path)) File.Delete(path); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } }
+        /// <summary>Deletes a temp file or folder; a failure is logged (and the caller carries on).</summary>
+        void EnsureRemoved(string path)
+        {
+            try { if (Directory.Exists(path)) Directory.Delete(path, true); else if (File.Exists(path)) File.Delete(path); }
+            catch (IOException ex) { Warn($"Could not remove '{path}': {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Warn($"Could not remove '{path}': {ex.Message}"); }
+        }
         async Task<int> RunProcess(string exe, string args, CancellationToken token) =>
             (await RunProcessCapture(exe, args, token)).ExitCode;
 
@@ -254,7 +277,13 @@ namespace SDBuilderWin
             var so = p.StandardOutput.ReadToEndAsync();
             var se = p.StandardError.ReadToEndAsync();
             try { await p.WaitForExitAsync(token); }
-            catch (OperationCanceledException) { try { if (!p.HasExited) p.Kill(entireProcessTree: true); } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); } throw; }
+            catch (OperationCanceledException)
+            {
+                try { if (!p.HasExited) p.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { } // it exited by itself in the meantime
+                catch (System.ComponentModel.Win32Exception ex) { Warn($"Could not stop {Path.GetFileName(exe)}: {ex.Message}"); }
+                throw;
+            }
             return (p.ExitCode, await so, await se);
         }
 
@@ -391,6 +420,7 @@ namespace SDBuilderWin
                     }
                 }
             }
+            // Only for the free-space estimate: an unreadable source is left out (the copy itself reports it).
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
@@ -436,7 +466,8 @@ namespace SDBuilderWin
         long SafeFileLength(string path)
         {
             try { return new FileInfo(path).Length; }
-            catch { return 0; }
+            catch (IOException) { return 0; }          // gone / unreadable: shown as 0
+            catch (UnauthorizedAccessException) { return 0; }
         }
 
         long SafeDirLength(string root, CancellationToken token, bool recursive)
@@ -450,7 +481,7 @@ namespace SDBuilderWin
                     foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
                     {
                         token.ThrowIfCancellationRequested();
-                        try { total += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                        try { total += new FileInfo(f).Length; } catch (IOException) { } // vanished while scanning: left out
                     }
                     return total;
                 }
@@ -466,7 +497,7 @@ namespace SDBuilderWin
                         foreach (var f in Directory.EnumerateFiles(dir))
                         {
                             token.ThrowIfCancellationRequested();
-                            try { total += new FileInfo(f).Length; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+                            try { total += new FileInfo(f).Length; } catch (IOException) { } // vanished while scanning: left out
                         }
                         foreach (var d in Directory.EnumerateDirectories(dir))
                         {
@@ -474,12 +505,12 @@ namespace SDBuilderWin
                             stack.Push(d);
                         }
                     }
-                    catch (OperationCanceledException) { throw; }
-                    catch { /* skip inaccessible subpaths */ }
+                    catch (IOException) { }                    // skip folders that cannot be read
+                    catch (UnauthorizedAccessException) { }
                 }
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            catch (IOException ex) { Warn($"Could not read folder '{root}': {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Warn($"Could not read folder '{root}': {ex.Message}"); }
             return total;
         }
 
@@ -523,7 +554,8 @@ namespace SDBuilderWin
                 var ti = System.IO.File.GetLastWriteTime(src);
                 System.IO.File.SetLastWriteTime(dest, ti);
             }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            catch (IOException ex) { Warn($"Could not set the date of '{Path.GetFileName(dest)}': {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { Warn($"Could not set the date of '{Path.GetFileName(dest)}': {ex.Message}"); }
         }
 
         private async System.Threading.Tasks.Task CopyDirectoryRobustAsync(string srcDir, string destDir, System.Threading.CancellationToken token)

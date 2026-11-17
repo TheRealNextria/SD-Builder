@@ -68,7 +68,8 @@ namespace SDBuilderWin
                 title = ExtractAscii(ip, 0x80, 0x80)?.Trim();
                 return !(string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(serial));
             }
-            catch { return false; }
+            catch (IOException) { return false; }             // unreadable image: no info (callers report it)
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         // Determine serial from a folder containing a .gdi or a single .gdi file (CDI skipped)
@@ -100,35 +101,36 @@ namespace SDBuilderWin
                 }
                 return false;
             }
-            catch { return false; }
+            catch (IOException) { return false; }          // unreadable source: treated as "serial unknown"
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         // Build a map of existing serials on the SD: serial -> index folder (02..9999). 01 is reserved.
-        static System.Collections.Generic.Dictionary<string, string> IndexDcSerials(string destRoot)
+        // warn (optional) is told about files that exist but cannot be read: that game is then not recognised.
+        static System.Collections.Generic.Dictionary<string, string> IndexDcSerials(string destRoot, Action<string>? warn = null)
         {
             var map = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
-            try
+            if (!System.IO.Directory.Exists(destRoot)) return map;
+            for (int i = 2; i <= 9999; i++)
             {
-                if (!System.IO.Directory.Exists(destRoot)) return map;
-                for (int i = 2; i <= 9999; i++)
-                {
-                    var idx = (i < 100) ? i.ToString("00") : (i < 1000) ? i.ToString("000") : i.ToString("0000");
-                    var dir = System.IO.Path.Combine(destRoot, idx);
-                    if (!System.IO.Directory.Exists(dir)) continue;
-                    var p = System.IO.Path.Combine(dir, "serial.txt");
-                    if (!System.IO.File.Exists(p)) continue;
-                    var s = System.IO.File.ReadAllText(p).Trim();
-                    if (string.IsNullOrWhiteSpace(s)) continue;
-                    s = s.ToUpperInvariant();
-                    if (!map.ContainsKey(s)) map[s] = idx;
-                }
+                var idx = (i < 100) ? i.ToString("00") : (i < 1000) ? i.ToString("000") : i.ToString("0000");
+                var dir = System.IO.Path.Combine(destRoot, idx);
+                if (!System.IO.Directory.Exists(dir)) continue;
+                var p = System.IO.Path.Combine(dir, "serial.txt");
+                if (!System.IO.File.Exists(p)) continue;
+                string s;
+                try { s = System.IO.File.ReadAllText(p).Trim(); }
+                catch (IOException ex) { warn?.Invoke($"Could not read \\{idx}\\serial.txt: {ex.Message}"); continue; }
+                catch (UnauthorizedAccessException ex) { warn?.Invoke($"Could not read \\{idx}\\serial.txt: {ex.Message}"); continue; }
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                s = s.ToUpperInvariant();
+                if (!map.ContainsKey(s)) map[s] = idx;
             }
-            catch { /* ignore */ }
             return map;
         }
 
         // Build a map of existing serials + disc markers on the SD: serial -> set of "D/T" strings (e.g., "1/2").
-        static System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> IndexDcSerialDiscs(string destRoot)
+        static System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> IndexDcSerialDiscs(string destRoot, Action<string>? warn = null)
         {
             var map = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>(System.StringComparer.OrdinalIgnoreCase);
             try
@@ -161,7 +163,8 @@ namespace SDBuilderWin
                                 if (!string.IsNullOrWhiteSpace(serial) && !string.IsNullOrWhiteSpace(disc)) break;
                             }
                         }
-                        catch { /* ignore */ }
+                        catch (IOException ex) { warn?.Invoke($"Could not read \\{idx}\\info{idx}.txt: {ex.Message}"); }
+                        catch (UnauthorizedAccessException ex) { warn?.Invoke($"Could not read \\{idx}\\info{idx}.txt: {ex.Message}"); }
                     }
 
                     // Fallback to serial.txt (no disc info)
@@ -170,7 +173,9 @@ namespace SDBuilderWin
                         var p = System.IO.Path.Combine(dir, "serial.txt");
                         if (System.IO.File.Exists(p))
                         {
-                            try { serial = System.IO.File.ReadAllText(p).Trim(); } catch { }
+                            try { serial = System.IO.File.ReadAllText(p).Trim(); }
+                            catch (IOException ex) { warn?.Invoke($"Could not read \\{idx}\\serial.txt: {ex.Message}"); }
+                            catch (UnauthorizedAccessException ex) { warn?.Invoke($"Could not read \\{idx}\\serial.txt: {ex.Message}"); }
                         }
                     }
 
@@ -185,7 +190,8 @@ namespace SDBuilderWin
                     set.Add(disc);
                 }
             }
-            catch { /* ignore */ }
+            catch (IOException ex) { warn?.Invoke($"Could not read the card: {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { warn?.Invoke($"Could not read the card: {ex.Message}"); }
             return map;
         }
 
@@ -374,10 +380,8 @@ namespace SDBuilderWin
 
                 return (title != null) || (serial != null);
             }
-            catch
-            {
-                return false;
-            }
+            catch (IOException) { return false; }             // unreadable image: no info (callers report it)
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         static byte[] ReadIpBinFromTrack(string trackPath, int sectorSize)
@@ -423,16 +427,12 @@ namespace SDBuilderWin
 
         static string ExtractAscii(byte[] buf, int offset, int count)
         {
-            try
-            {
-                if (offset < 0 || offset + count > buf.Length) return string.Empty;
-                var s = System.Text.Encoding.ASCII.GetString(buf, offset, count);
-                // Normalize: replace NULs with spaces, trim, collapse double spaces
-                s = s.Replace('\0', ' ').Trim();
-                while (s.Contains("  ")) s = s.Replace("  ", " ");
-                return s;
-            }
-            catch { return string.Empty; }
+            if (offset < 0 || offset + count > buf.Length) return string.Empty;
+            var s = System.Text.Encoding.ASCII.GetString(buf, offset, count);
+            // Normalize: replace NULs with spaces, trim, collapse double spaces
+            s = s.Replace('\0', ' ').Trim();
+            while (s.Contains("  ")) s = s.Replace("  ", " ");
+            return s;
         }
     }
 }

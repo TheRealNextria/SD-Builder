@@ -96,7 +96,7 @@ namespace SDBuilderWin
 
             Info($"[DC menu] {result.Kind} installed to {d}:\\01 ({result.GameCount} game(s) in the menu).");
             SetDcStatus($"{result.Kind} installed with {result.GameCount} games.");
-            try { BeginInvoke(new Action(RefreshDreamcastList)); } catch { }
+            RefreshDreamcastList();
         }
 
         async Task RebuildDreamcastMenuAsync(string d, CancellationToken token)
@@ -115,7 +115,7 @@ namespace SDBuilderWin
             var result = await Task.Run(() => builder.BuildAndInstall(sdRoot, kind.Value, token), token);
 
             SetDcStatus($"{result.Kind} rebuilt with {result.GameCount} games.");
-            try { BeginInvoke(new Action(RefreshDreamcastList)); } catch { }
+            RefreshDreamcastList();
             MessageBox.Show(this,
                 $"{result.Kind} rebuilt with {result.GameCount} games.\nWritten to {result.MenuFolder}",
                 "Rebuild Menu", MessageBoxButtons.OK, MessageBoxIcon.Information);

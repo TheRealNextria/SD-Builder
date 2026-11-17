@@ -43,7 +43,7 @@ namespace SDBuilderWin
         // ------------------- Xstation helpers -------------------
         void SetXsStatus(string text)
         {
-            try { lblStatusXS.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblStatusXS.Text = text;
         }
 
 
@@ -90,15 +90,11 @@ namespace SDBuilderWin
             lvXsList.ItemChecked += (_, __) =>
             {
                 if (_xsBulkChange) return;
-                try
+                if (lvXsList.FocusedItem is ListViewItem it && it != null)
                 {
-                    if (lvXsList.FocusedItem is ListViewItem it && it != null)
-                    {
-                        var path = it.Text;
-                        if (it.Checked) _xsChecked.Add(path); else _xsChecked.Remove(path);
-                    }
+                    var path = it.Text;
+                    if (it.Checked) _xsChecked.Add(path); else _xsChecked.Remove(path);
                 }
-                catch { /* ignore */ }
                 UpdateXsCounters();
             };
 
@@ -156,12 +152,8 @@ namespace SDBuilderWin
                 count++;
                 if (it.Tag is long sz) total += sz;
             }
-            try
-            {
-                lblCountXS.Text = $"Checked: {count}";
-                lblSizeXS.Text = $"Size: {FormatSize(total)}";
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblCountXS.Text = $"Checked: {count}";
+            lblSizeXS.Text = $"Size: {FormatSize(total)}";
         }
 
         // ------------------- Firmware flows (unchanged) -------------------

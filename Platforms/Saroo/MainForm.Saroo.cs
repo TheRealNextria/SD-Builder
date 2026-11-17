@@ -40,7 +40,7 @@ namespace SDBuilderWin
 
         void SetSrStatus(string text)
         {
-            try { lblStatusSR.Text = text; } catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblStatusSR.Text = text;
         }
 
         void WireSarooListmaker()
@@ -71,39 +71,31 @@ namespace SDBuilderWin
             // Saroo search debounce + wiring
             _srFilterDebounce = new System.Windows.Forms.Timer { Interval = 300 };
             _srFilterDebounce.Tick += (_, __) => { _srFilterDebounce!.Stop(); RefreshSarooList(); };
-            try
+            if (txtSarooFilter != null)
             {
-                if (txtSarooFilter != null)
+                txtSarooFilter.TextChanged += (_, __) => { _srFilterDebounce?.Stop(); _srFilterDebounce?.Start(); };
+                txtSarooFilter.KeyDown += (s, e) =>
                 {
-                    txtSarooFilter.TextChanged += (_, __) => { _srFilterDebounce?.Stop(); _srFilterDebounce?.Start(); };
-                    txtSarooFilter.KeyDown += (s, e) =>
+                    if (e.KeyCode == Keys.Enter)
                     {
-                        if (e.KeyCode == Keys.Enter)
-                        {
-                            e.Handled = true;
-                            e.SuppressKeyPress = true;
-                            _srFilterDebounce?.Stop();
-                            RefreshSarooList();
-                        }
-                    };
-                }
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
-
-            // Saroo clear button
-            try
-            {
-                if (btnSarooClearFilter != null && txtSarooFilter != null)
-                {
-                    btnSarooClearFilter.Click += (_, __) =>
-                    {
-                        txtSarooFilter.Text = string.Empty;
+                        e.Handled = true;
+                        e.SuppressKeyPress = true;
                         _srFilterDebounce?.Stop();
                         RefreshSarooList();
-                    };
-                }
+                    }
+                };
             }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+
+            // Saroo clear button
+            if (btnSarooClearFilter != null && txtSarooFilter != null)
+            {
+                btnSarooClearFilter.Click += (_, __) =>
+                {
+                    txtSarooFilter.Text = string.Empty;
+                    _srFilterDebounce?.Stop();
+                    RefreshSarooList();
+                };
+            }
 
 
             btnSrChoose.Click += (_, __) =>
@@ -122,16 +114,12 @@ namespace SDBuilderWin
             lvSrList.ItemChecked += (s, e) =>
             {
                 if (_srBulkChange) return;
-                try
+                var it = e?.Item as ListViewItem;
+                if (it != null)
                 {
-                    var it = e?.Item as ListViewItem;
-                    if (it != null)
-                    {
-                        var path = it.Text;
-                        if (it.Checked) _srChecked.Add(path); else _srChecked.Remove(path);
-                    }
+                    var path = it.Text;
+                    if (it.Checked) _srChecked.Add(path); else _srChecked.Remove(path);
                 }
-                catch { /* ignore */ }
                 UpdateSrCounters();
             };
 
@@ -189,12 +177,8 @@ namespace SDBuilderWin
                 count++;
                 if (it.Tag is long sz) total += sz;
             }
-            try
-            {
-                lblCountSR.Text = $"Checked: {count}";
-                lblSizeSR.Text = $"Size: {FormatSize(total)}";
-            }
-            catch (Exception ex) { Warn("Exception suppressed: " + ex.Message); }
+            lblCountSR.Text = $"Checked: {count}";
+            lblSizeSR.Text = $"Size: {FormatSize(total)}";
         }
 
         // ===== Saroo Copy routine START =====
@@ -242,7 +226,8 @@ namespace SDBuilderWin
                     return Directory.EnumerateFiles(folder, "*", SearchOption.TopDirectoryOnly)
                         .FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
                 }
-                catch { return null; }
+                catch (IOException) { return null; }           // unreadable folder: treated as "not found"
+                catch (UnauthorizedAccessException) { return null; }
             }
 
             string? FindChildDirectoryIgnoreCase(string folder, string dirName)
@@ -252,7 +237,8 @@ namespace SDBuilderWin
                     return Directory.EnumerateDirectories(folder, "*", SearchOption.TopDirectoryOnly)
                         .FirstOrDefault(d => string.Equals(Path.GetFileName(d), dirName, StringComparison.OrdinalIgnoreCase));
                 }
-                catch { return null; }
+                catch (IOException) { return null; }
+                catch (UnauthorizedAccessException) { return null; }
             }
 
             bool ContainsMainSarooFiles(string folder)
