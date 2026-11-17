@@ -25,7 +25,7 @@ Supported devices:
   - SAROO firmware
   - Swiss `IPL.dol` (newest release from GitHub) and Swiss cheat files
   - N64FlashcartMenu `sc64menu.n64`, 64DD IPL and emulators
-  - Dreamcast **GDmenu** or **openMenu**, built from the templates in `Tools` and filled with the
+  - Dreamcast **GDmenu** or **openMenu**, built from the templates in `tools` and filled with the
     games on the card
 - **Dreamcast card management** in the GDMENUCardManager style:
   - each game goes into the next free `\02`, `\03`, … folder as `disc.gdi` / `disc.cdi`
@@ -54,7 +54,7 @@ Supported devices:
 ## Installation
 
 1. Download the latest release.
-2. Unzip it to a folder of your choice. Keep the `Tools` folder next to `SD-Builder.exe`: it contains
+2. Unzip it to a folder of your choice. Keep the `tools` folder next to `SD-Builder.exe`: it contains
    the Dreamcast menu templates.
 3. Run `SD-Builder.exe`.
 
@@ -117,8 +117,8 @@ dotnet build
 dotnet publish -c Release -r win-x64
 ```
 
-The published `.exe` is in `bin\Release\net8.0-windows\win-x64\publish\`. Copy the `tools` folder
-next to it.
+The published `.exe` is in `bin\Release\net8.0-windows\win-x64\publish\`, with the `tools` folder
+(Dreamcast menu templates) next to it. Ship that whole folder.
 
 Project layout:
 

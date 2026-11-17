@@ -39,4 +39,15 @@
     <Content Include="Assets\SDBuilder_Icon.ico" />
     <None Include="app.manifest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Dreamcast menu templates: the app reads them from the "Tools" folder next to SD-Builder.exe
+         (the folder is named "tools" on disk; Windows paths are not case-sensitive).
+         Copied on build and publish, and kept out of the single-file .exe so they stay real files.
+         gdishrink.exe is not used by the app. -->
+    <None Include="tools\**\*" Exclude="tools\gdishrink.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>
